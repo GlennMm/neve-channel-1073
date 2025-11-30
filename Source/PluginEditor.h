@@ -7,7 +7,7 @@ namespace Neve1073
 {
 
 /**
- * VU Meter Component
+ * VU Meter Component - Vintage style with LED segments
  */
 class VUMeter : public juce::Component, public juce::Timer
 {
@@ -20,39 +20,104 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        auto bounds = getLocalBounds().toFloat();
+        auto bounds = getLocalBounds().toFloat().reduced(1.0f);
 
-        // Background
-        g.setColour(juce::Colour(0xFF1A1A1A));
-        g.fillRoundedRectangle(bounds, 2.0f);
+        // Meter background (recessed look)
+        g.setColour(juce::Colour(0xFF0A0A0A));
+        g.fillRoundedRectangle(bounds, 3.0f);
 
-        // Meter fill
+        // Inner shadow
+        g.setColour(juce::Colours::black.withAlpha(0.6f));
+        g.drawRoundedRectangle(bounds.reduced(1.0f), 2.0f, 1.0f);
+
+        // Calculate level
         float levelDb = 20.0f * std::log10(std::max(0.0001f, currentLevel));
         float normalizedLevel = juce::jlimit(0.0f, 1.0f, (levelDb + 60.0f) / 60.0f);
+        float peakNormalized = juce::jlimit(0.0f, 1.0f, (peakDb + 60.0f) / 60.0f);
 
-        juce::ColourGradient gradient(
-            juce::Colour(0xFF00AA00), 0, bounds.getBottom(),
-            juce::Colour(0xFFFF0000), 0, bounds.getY(), false);
-        gradient.addColour(0.7, juce::Colour(0xFFAAAA00));
+        // LED segment style meter
+        int numSegments = 20;
+        float segmentHeight = (bounds.getHeight() - 4.0f) / numSegments;
+        float segmentWidth = bounds.getWidth() - 6.0f;
+        float startX = bounds.getX() + 3.0f;
+        float startY = bounds.getY() + 2.0f;
 
-        g.setGradientFill(gradient);
-        float meterHeight = bounds.getHeight() * normalizedLevel;
-        g.fillRoundedRectangle(bounds.getX() + 2, bounds.getBottom() - meterHeight,
-                               bounds.getWidth() - 4, meterHeight, 1.0f);
+        for (int i = 0; i < numSegments; ++i)
+        {
+            float segmentPos = 1.0f - (float)i / (float)numSegments;
+            float y = startY + i * segmentHeight;
 
-        // Border
-        g.setColour(juce::Colour(0xFF3A3A3A));
-        g.drawRoundedRectangle(bounds, 2.0f, 1.0f);
+            // Determine segment color based on position
+            juce::Colour segmentColor;
+            if (segmentPos > 0.9f)
+                segmentColor = juce::Colour(0xFFCC3333);  // Red (clip)
+            else if (segmentPos > 0.75f)
+                segmentColor = juce::Colour(0xFFCC9933);  // Orange (hot)
+            else if (segmentPos > 0.5f)
+                segmentColor = juce::Colour(0xFFCCCC33);  // Yellow
+            else
+                segmentColor = juce::Colour(0xFF33AA33);  // Green
+
+            // Draw lit or unlit segment
+            if (segmentPos <= normalizedLevel)
+            {
+                // Lit segment with glow
+                g.setColour(segmentColor);
+                g.fillRoundedRectangle(startX, y + 1, segmentWidth, segmentHeight - 2, 1.0f);
+
+                // Subtle glow effect
+                g.setColour(segmentColor.withAlpha(0.3f));
+                g.fillRoundedRectangle(startX - 1, y, segmentWidth + 2, segmentHeight, 2.0f);
+            }
+            else
+            {
+                // Unlit segment (dim)
+                g.setColour(segmentColor.withAlpha(0.15f));
+                g.fillRoundedRectangle(startX, y + 1, segmentWidth, segmentHeight - 2, 1.0f);
+            }
+
+            // Peak hold indicator
+            if (std::abs(segmentPos - peakNormalized) < (1.0f / numSegments) && peakNormalized > 0.01f)
+            {
+                g.setColour(juce::Colours::white.withAlpha(0.9f));
+                g.fillRoundedRectangle(startX, y + 1, segmentWidth, segmentHeight - 2, 1.0f);
+            }
+        }
+
+        // Outer bezel
+        juce::ColourGradient bezelGradient(
+            juce::Colour(0xFF3A3A3A), bounds.getX(), bounds.getY(),
+            juce::Colour(0xFF1A1A1A), bounds.getRight(), bounds.getBottom(), false);
+        g.setGradientFill(bezelGradient);
+        g.drawRoundedRectangle(bounds, 3.0f, 2.0f);
     }
 
     void timerCallback() override
     {
         float newLevel = inputMeter ? processor.getInputLevel() : processor.getOutputLevel();
-        // Smooth decay
+
+        // Smooth attack/decay
         if (newLevel > currentLevel)
-            currentLevel = newLevel;
+            currentLevel = currentLevel * 0.3f + newLevel * 0.7f;  // Fast attack
         else
-            currentLevel = currentLevel * 0.9f + newLevel * 0.1f;
+            currentLevel = currentLevel * 0.92f + newLevel * 0.08f;  // Slow decay
+
+        // Peak hold
+        float newDb = 20.0f * std::log10(std::max(0.0001f, newLevel));
+        if (newDb > peakDb)
+        {
+            peakDb = newDb;
+            peakHoldCounter = 30;  // Hold for 1 second at 30fps
+        }
+        else if (peakHoldCounter > 0)
+        {
+            peakHoldCounter--;
+        }
+        else
+        {
+            peakDb -= 1.5f;  // Decay peak indicator
+        }
+
         repaint();
     }
 
@@ -60,6 +125,8 @@ private:
     Neve1073Processor& processor;
     bool inputMeter;
     float currentLevel = 0.0f;
+    float peakDb = -60.0f;
+    int peakHoldCounter = 0;
 };
 
 /**
@@ -88,6 +155,9 @@ private:
         void drawComboBox(juce::Graphics& g, int width, int height, bool isButtonDown,
                           int buttonX, int buttonY, int buttonW, int buttonH,
                           juce::ComboBox& box) override;
+        void drawToggleButton(juce::Graphics& g, juce::ToggleButton& button,
+                              bool shouldDrawButtonAsHighlighted,
+                              bool shouldDrawButtonAsDown) override;
     };
 
     VintageLookAndFeel vintageLnF;
