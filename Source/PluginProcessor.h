@@ -52,6 +52,10 @@ public:
     // Parameter tree
     juce::AudioProcessorValueTreeState& getParameters() { return parameters; }
 
+    // VU meter levels (for GUI)
+    float getInputLevel() const { return inputLevel.load(); }
+    float getOutputLevel() const { return outputLevel.load(); }
+
     // Parameter IDs
     static constexpr const char* PARAM_INPUT_GAIN = "inputGain";
     static constexpr const char* PARAM_OUTPUT_GAIN = "outputGain";
@@ -66,6 +70,9 @@ public:
     static constexpr const char* PARAM_HIGH_GAIN = "highGain";
     static constexpr const char* PARAM_HPF_FREQ = "hpfFreq";
     static constexpr const char* PARAM_EQ_ENABLED = "eqEnabled";
+    static constexpr const char* PARAM_MIX = "mix";
+    static constexpr const char* PARAM_OVERSAMPLING = "oversampling";
+    static constexpr const char* PARAM_QUALITY = "quality";
 
 private:
     juce::AudioProcessorValueTreeState parameters;
@@ -83,13 +90,26 @@ private:
     // Smoothed parameters
     SmoothedParameter inputGainSmooth{0.0f, 50.0f};
     SmoothedParameter outputGainSmooth{0.0f, 50.0f};
+    SmoothedParameter mixSmooth{1.0f, 50.0f};
 
-    // Oversampling
+    // Oversampling (multiple instances for different factors)
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
+    int currentOversamplingFactor = 2;  // 2^2 = 4x default
+    int lastOversamplingChoice = 2;
+
+    // Dry buffer for mix
+    juce::AudioBuffer<float> dryBuffer;
+
+    // Level metering
+    std::atomic<float> inputLevel{0.0f};
+    std::atomic<float> outputLevel{0.0f};
 
     double currentSampleRate = 44100.0;
+    int currentBlockSize = 512;
 
     void updateDSPFromParameters();
+    void updateOversampling();
+    float calculateRMS(const juce::AudioBuffer<float>& buffer) const;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Neve1073Processor)
 };

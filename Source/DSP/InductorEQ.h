@@ -19,6 +19,7 @@ namespace Neve1073
  * - ±18dB boost/cut
  * - Non-complementary boost/cut curves
  * - Subtle inductor saturation at high levels
+ * - Resonant behavior with energy storage
  */
 class InductorEQ
 {
@@ -66,13 +67,21 @@ private:
     float a2 = 0.0f;
     float a3 = 0.0f;
 
-    // Inductor state for saturation
-    float inductorState = 0.0f;
+    // Inductor core state for saturation
+    float inductorCurrent = 0.0f;
+    float inductorEnergy = 0.0f;
+
+    // Inductor physical properties per frequency
+    float inductance = 0.45f;    // Henries
+    float dcResistance = 35.0f;  // Ohms
+    float corePermeability = 1.0f;
 
     void calculateCoefficients();
     float getFrequencyHz(Frequency freq) const;
     float getQ(Frequency freq) const;
-    float saturateInductor(float x) const;
+    float getInductance(Frequency freq) const;
+    float getDCResistance(Frequency freq) const;
+    float saturateInductorCore(float current) const;
 };
 
 } // namespace Neve1073

@@ -111,47 +111,103 @@ juce::AudioProcessorValueTreeState::ParameterLayout Neve1073Processor::createPar
         "EQ Enabled",
         true));
 
+    // Mix (dry/wet)
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{PARAM_MIX, 1},
+        "Mix",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 1.0f),
+        100.0f, "%"));
+
+    // Oversampling
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{PARAM_OVERSAMPLING, 1},
+        "Oversampling",
+        juce::StringArray{"1x (Off)", "2x", "4x", "8x"},
+        2));  // Default 4x
+
+    // Quality (DSP accuracy)
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{PARAM_QUALITY, 1},
+        "Quality",
+        juce::StringArray{"Eco", "Normal", "High"},
+        1));  // Default Normal
+
     return {params.begin(), params.end()};
 }
 
 void Neve1073Processor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     currentSampleRate = sampleRate;
+    currentBlockSize = samplesPerBlock;
 
-    // Create 4x oversampling
-    oversampling = std::make_unique<juce::dsp::Oversampling<float>>(
-        2, 2,  // 2 channels, 2^2 = 4x
-        juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
-        true);
-    oversampling->initProcessing(static_cast<size_t>(samplesPerBlock));
+    // Allocate dry buffer for mix
+    dryBuffer.setSize(2, samplesPerBlock);
 
-    double oversampledRate = sampleRate * 4.0;
-
-    // Prepare all DSP components at oversampled rate
-    for (int ch = 0; ch < 2; ++ch)
-    {
-        inputTransformers[ch].prepare(oversampledRate, samplesPerBlock * 4);
-        outputTransformers[ch].prepare(oversampledRate, samplesPerBlock * 4);
-        preampStages[ch].prepare(oversampledRate, samplesPerBlock * 4);
-        midEQs[ch].prepare(oversampledRate, samplesPerBlock * 4);
-        lowShelfEQs[ch].prepare(oversampledRate, samplesPerBlock * 4);
-        highShelfEQs[ch].prepare(oversampledRate, samplesPerBlock * 4);
-        highPassFilters[ch].prepare(oversampledRate, samplesPerBlock * 4);
-    }
+    // Initialize oversampling
+    updateOversampling();
 
     inputGainSmooth.prepare(sampleRate);
     outputGainSmooth.prepare(sampleRate);
+    mixSmooth.prepare(sampleRate);
 
     updateDSPFromParameters();
+}
+
+void Neve1073Processor::updateOversampling()
+{
+    int oversamplingChoice = static_cast<int>(*parameters.getRawParameterValue(PARAM_OVERSAMPLING));
+
+    // Map choice to factor: 0=1x(0), 1=2x(1), 2=4x(2), 3=8x(3)
+    currentOversamplingFactor = oversamplingChoice;
+
+    if (currentOversamplingFactor == 0)
+    {
+        // No oversampling
+        oversampling.reset();
+    }
+    else
+    {
+        oversampling = std::make_unique<juce::dsp::Oversampling<float>>(
+            2, currentOversamplingFactor,
+            juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR,
+            true);
+        oversampling->initProcessing(static_cast<size_t>(currentBlockSize));
+    }
+
+    // Calculate oversampled rate
+    double oversampledRate = currentSampleRate * std::pow(2.0, currentOversamplingFactor);
+    int oversampledBlockSize = currentBlockSize * static_cast<int>(std::pow(2, currentOversamplingFactor));
+
+    // Prepare all DSP components at appropriate rate
+    for (int ch = 0; ch < 2; ++ch)
+    {
+        inputTransformers[ch].prepare(oversampledRate, oversampledBlockSize);
+        outputTransformers[ch].prepare(oversampledRate, oversampledBlockSize);
+        preampStages[ch].prepare(oversampledRate, oversampledBlockSize);
+        midEQs[ch].prepare(oversampledRate, oversampledBlockSize);
+        lowShelfEQs[ch].prepare(oversampledRate, oversampledBlockSize);
+        highShelfEQs[ch].prepare(oversampledRate, oversampledBlockSize);
+        highPassFilters[ch].prepare(oversampledRate, oversampledBlockSize);
+    }
+
+    lastOversamplingChoice = oversamplingChoice;
 }
 
 void Neve1073Processor::releaseResources()
 {
     oversampling.reset();
+    dryBuffer.setSize(0, 0);
 }
 
 void Neve1073Processor::updateDSPFromParameters()
 {
+    // Check if oversampling changed
+    int oversamplingChoice = static_cast<int>(*parameters.getRawParameterValue(PARAM_OVERSAMPLING));
+    if (oversamplingChoice != lastOversamplingChoice)
+    {
+        updateOversampling();
+    }
+
     // Get parameter values
     float inputDrive = *parameters.getRawParameterValue(PARAM_INPUT_DRIVE);
     float outputDrive = *parameters.getRawParameterValue(PARAM_OUTPUT_DRIVE);
@@ -168,15 +224,20 @@ void Neve1073Processor::updateDSPFromParameters()
 
     int hpfFreqIdx = static_cast<int>(*parameters.getRawParameterValue(PARAM_HPF_FREQ));
 
+    int qualityIdx = static_cast<int>(*parameters.getRawParameterValue(PARAM_QUALITY));
+    auto quality = static_cast<TransformerSaturation::Quality>(qualityIdx);
+
     // Update DSP components
     for (int ch = 0; ch < 2; ++ch)
     {
         inputTransformers[ch].setDrive(inputDrive);
+        inputTransformers[ch].setQuality(quality);
         outputTransformers[ch].setDrive(outputDrive);
+        outputTransformers[ch].setQuality(quality);
 
         preampStages[ch].setGain(preampGain);
         preampStages[ch].setBias(preampBias);
-        preampStages[ch].setSaturation(preampGain / 60.0f);  // Scale saturation with gain
+        preampStages[ch].setSaturation(preampGain / 60.0f);
 
         lowShelfEQs[ch].setLowFrequency(static_cast<ShelfEQ::LowFrequency>(lowFreqIdx));
         lowShelfEQs[ch].setGainDb(lowGain);
@@ -190,6 +251,24 @@ void Neve1073Processor::updateDSPFromParameters()
     }
 }
 
+float Neve1073Processor::calculateRMS(const juce::AudioBuffer<float>& buffer) const
+{
+    float sum = 0.0f;
+    int totalSamples = 0;
+
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+    {
+        const float* data = buffer.getReadPointer(ch);
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+        {
+            sum += data[i] * data[i];
+        }
+        totalSamples += buffer.getNumSamples();
+    }
+
+    return totalSamples > 0 ? std::sqrt(sum / static_cast<float>(totalSamples)) : 0.0f;
+}
+
 void Neve1073Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& /*midiMessages*/)
 {
     juce::ScopedNoDenormals noDenormals;
@@ -201,19 +280,23 @@ void Neve1073Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear(i, 0, buffer.getNumSamples());
 
-    // Safety check - ensure oversampling is initialized
-    if (oversampling == nullptr)
-        return;
-
     // Update parameters
     updateDSPFromParameters();
 
     float inputGainDb = *parameters.getRawParameterValue(PARAM_INPUT_GAIN);
     float outputGainDb = *parameters.getRawParameterValue(PARAM_OUTPUT_GAIN);
     bool eqEnabled = *parameters.getRawParameterValue(PARAM_EQ_ENABLED) > 0.5f;
+    float mixPercent = *parameters.getRawParameterValue(PARAM_MIX);
 
     inputGainSmooth.setTargetValue(std::pow(10.0f, inputGainDb / 20.0f));
     outputGainSmooth.setTargetValue(std::pow(10.0f, outputGainDb / 20.0f));
+    mixSmooth.setTargetValue(mixPercent / 100.0f);
+
+    // Store dry signal for mix
+    dryBuffer.makeCopyOf(buffer, true);
+
+    // Calculate input level for VU meter
+    inputLevel.store(calculateRMS(buffer));
 
     // Apply input gain with smoothing
     for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
@@ -225,62 +308,85 @@ void Neve1073Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
         }
     }
 
-    // Upsample
-    auto block = juce::dsp::AudioBlock<float>(buffer);
-    auto oversampledBlock = oversampling->processSamplesUp(block);
+    int numChannels = juce::jmin(2, buffer.getNumChannels());
 
-    int numOversampledSamples = static_cast<int>(oversampledBlock.getNumSamples());
-    int numChannels = juce::jmin(2, static_cast<int>(oversampledBlock.getNumChannels()));
-
-    // Process each channel
-    for (int ch = 0; ch < numChannels; ++ch)
+    if (oversampling != nullptr && currentOversamplingFactor > 0)
     {
-        float* channelData = oversampledBlock.getChannelPointer(static_cast<size_t>(ch));
+        // Process with oversampling
+        auto block = juce::dsp::AudioBlock<float>(buffer);
+        auto oversampledBlock = oversampling->processSamplesUp(block);
 
-        // Input transformer
-        inputTransformers[ch].processBlock(channelData, numOversampledSamples);
+        int numOversampledSamples = static_cast<int>(oversampledBlock.getNumSamples());
 
-        // Preamp stage
-        preampStages[ch].processBlock(channelData, numOversampledSamples);
-
-        // EQ section (if enabled)
-        if (eqEnabled)
+        // Process each channel
+        for (int ch = 0; ch < numChannels; ++ch)
         {
-            lowShelfEQs[ch].processBlock(channelData, numOversampledSamples);
-            midEQs[ch].processBlock(channelData, numOversampledSamples);
-            highShelfEQs[ch].processBlock(channelData, numOversampledSamples);
+            float* channelData = oversampledBlock.getChannelPointer(static_cast<size_t>(ch));
+
+            inputTransformers[ch].processBlock(channelData, numOversampledSamples);
+            preampStages[ch].processBlock(channelData, numOversampledSamples);
+
+            if (eqEnabled)
+            {
+                lowShelfEQs[ch].processBlock(channelData, numOversampledSamples);
+                midEQs[ch].processBlock(channelData, numOversampledSamples);
+                highShelfEQs[ch].processBlock(channelData, numOversampledSamples);
+            }
+
+            highPassFilters[ch].processBlock(channelData, numOversampledSamples);
+            outputTransformers[ch].processBlock(channelData, numOversampledSamples);
         }
 
-        // High-pass filter (always active if not "Off")
-        highPassFilters[ch].processBlock(channelData, numOversampledSamples);
+        oversampling->processSamplesDown(block);
+    }
+    else
+    {
+        // Process without oversampling (1x)
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            float* channelData = buffer.getWritePointer(ch);
+            int numSamples = buffer.getNumSamples();
 
-        // Output transformer
-        outputTransformers[ch].processBlock(channelData, numOversampledSamples);
+            inputTransformers[ch].processBlock(channelData, numSamples);
+            preampStages[ch].processBlock(channelData, numSamples);
+
+            if (eqEnabled)
+            {
+                lowShelfEQs[ch].processBlock(channelData, numSamples);
+                midEQs[ch].processBlock(channelData, numSamples);
+                highShelfEQs[ch].processBlock(channelData, numSamples);
+            }
+
+            highPassFilters[ch].processBlock(channelData, numSamples);
+            outputTransformers[ch].processBlock(channelData, numSamples);
+        }
     }
 
-    // Downsample
-    oversampling->processSamplesDown(block);
-
-    // Apply output gain with smoothing (reset smoother for fresh pass)
-    outputGainSmooth.setTargetValue(std::pow(10.0f, outputGainDb / 20.0f));
+    // Apply mix (dry/wet) and output gain
     for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
     {
+        float mix = mixSmooth.getNextValue();
         float gain = outputGainSmooth.getNextValue();
-        for (int ch = 0; ch < juce::jmin(2, buffer.getNumChannels()); ++ch)
+
+        for (int ch = 0; ch < numChannels; ++ch)
         {
-            buffer.setSample(ch, sample, buffer.getSample(ch, sample) * gain);
+            float wet = buffer.getSample(ch, sample);
+            float dry = dryBuffer.getSample(ch, sample);
+            float mixed = dry * (1.0f - mix) + wet * mix;
+            buffer.setSample(ch, sample, mixed * gain);
         }
     }
+
+    // Calculate output level for VU meter
+    outputLevel.store(calculateRMS(buffer));
 }
 
 bool Neve1073Processor::isBusesLayoutSupported(const BusesLayout& layouts) const
 {
-    // Only mono or stereo
     if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
         && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
         return false;
 
-    // Input must match output
     if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
         return false;
 

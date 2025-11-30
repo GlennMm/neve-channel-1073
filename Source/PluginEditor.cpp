@@ -6,7 +6,6 @@ namespace Neve1073
 // Vintage Look and Feel
 Neve1073Editor::VintageLookAndFeel::VintageLookAndFeel()
 {
-    // Neve-inspired color scheme
     setColour(juce::Slider::rotarySliderFillColourId, juce::Colour(0xFF2B5797));
     setColour(juce::Slider::thumbColourId, juce::Colour(0xFFE8E8E8));
     setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xFF3A3A3A));
@@ -26,18 +25,15 @@ void Neve1073Editor::VintageLookAndFeel::drawRotarySlider(
     auto rw = radius * 2.0f;
     auto angle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
 
-    // Knob body (gradient)
     juce::ColourGradient gradient(
         juce::Colour(0xFF4A4A4A), centreX, centreY - radius,
         juce::Colour(0xFF2A2A2A), centreX, centreY + radius, false);
     g.setGradientFill(gradient);
     g.fillEllipse(rx, ry, rw, rw);
 
-    // Knob outline
     g.setColour(juce::Colour(0xFF1A1A1A));
     g.drawEllipse(rx, ry, rw, rw, 2.0f);
 
-    // Pointer
     juce::Path p;
     auto pointerLength = radius * 0.6f;
     auto pointerThickness = 3.0f;
@@ -48,7 +44,6 @@ void Neve1073Editor::VintageLookAndFeel::drawRotarySlider(
     g.setColour(juce::Colour(0xFFE8E8E8));
     g.fillPath(p);
 
-    // Indicator ring (position)
     g.setColour(juce::Colour(0xFF2B5797));
     juce::Path arcPath;
     arcPath.addCentredArc(centreX, centreY, radius + 2.0f, radius + 2.0f,
@@ -70,7 +65,6 @@ void Neve1073Editor::VintageLookAndFeel::drawComboBox(
     g.setColour(findColour(juce::ComboBox::outlineColourId));
     g.drawRoundedRectangle(boxBounds.toFloat().reduced(0.5f, 0.5f), cornerSize, 1.0f);
 
-    // Arrow
     juce::Rectangle<int> arrowZone(width - 20, 0, 15, height);
     juce::Path path;
     path.addTriangle((float)arrowZone.getX() + 3.0f, (float)arrowZone.getCentreY() - 2.0f,
@@ -85,10 +79,16 @@ void Neve1073Editor::VintageLookAndFeel::drawComboBox(
 Neve1073Editor::Neve1073Editor(Neve1073Processor& p)
     : AudioProcessorEditor(&p)
     , processorRef(p)
+    , inputMeter(p, true)
+    , outputMeter(p, false)
 {
     setLookAndFeel(&vintageLnF);
 
-    // Setup all components
+    // VU Meters
+    addAndMakeVisible(inputMeter);
+    addAndMakeVisible(outputMeter);
+
+    // Setup sliders
     setupSlider(inputGainSlider, " dB");
     setupSlider(inputDriveSlider, " dB");
     setupSlider(preampGainSlider, " dB");
@@ -98,8 +98,9 @@ Neve1073Editor::Neve1073Editor(Neve1073Processor& p)
     setupSlider(highGainSlider, " dB");
     setupSlider(outputGainSlider, " dB");
     setupSlider(outputDriveSlider, " dB");
+    setupSlider(mixSlider, " %");
 
-    // Setup combo boxes with their options
+    // Setup combo boxes
     lowFreqCombo.addItemList({"35 Hz", "60 Hz", "110 Hz", "220 Hz"}, 1);
     setupComboBox(lowFreqCombo);
 
@@ -108,6 +109,12 @@ Neve1073Editor::Neve1073Editor(Neve1073Processor& p)
 
     hpfFreqCombo.addItemList({"Off", "50 Hz", "80 Hz", "160 Hz", "300 Hz"}, 1);
     setupComboBox(hpfFreqCombo);
+
+    oversamplingCombo.addItemList({"1x (Off)", "2x", "4x", "8x"}, 1);
+    setupComboBox(oversamplingCombo);
+
+    qualityCombo.addItemList({"Eco", "Normal", "High"}, 1);
+    setupComboBox(qualityCombo);
 
     // Title
     titleLabel.setText("NEVE 1073", juce::dontSendNotification);
@@ -124,6 +131,7 @@ Neve1073Editor::Neve1073Editor(Neve1073Processor& p)
     setupLabel(highLabel);
     setupLabel(hpfLabel);
     setupLabel(outputLabel);
+    setupLabel(mixLabel);
 
     // EQ enable button
     eqEnabledButton.setColour(juce::ToggleButton::textColourId, juce::Colour(0xFFE8E8E8));
@@ -167,7 +175,16 @@ Neve1073Editor::Neve1073Editor(Neve1073Processor& p)
     eqEnabledAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         params, Neve1073Processor::PARAM_EQ_ENABLED, eqEnabledButton);
 
-    setSize(800, 400);
+    mixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        params, Neve1073Processor::PARAM_MIX, mixSlider);
+
+    oversamplingAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+        params, Neve1073Processor::PARAM_OVERSAMPLING, oversamplingCombo);
+
+    qualityAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+        params, Neve1073Processor::PARAM_QUALITY, qualityCombo);
+
+    setSize(900, 420);
 }
 
 Neve1073Editor::~Neve1073Editor()
@@ -210,69 +227,91 @@ void Neve1073Editor::paint(juce::Graphics& g)
 
     // Section dividers
     g.setColour(juce::Colour(0xFF3A3A3A));
-
-    int sectionWidth = getWidth() / 7;
-    for (int i = 1; i < 7; ++i)
+    int sectionWidth = (getWidth() - 60) / 8;  // Account for meters
+    for (int i = 1; i < 8; ++i)
     {
-        g.drawVerticalLine(i * sectionWidth, 50.0f, (float)getHeight() - 10.0f);
+        g.drawVerticalLine(30 + i * sectionWidth, 50.0f, (float)getHeight() - 50.0f);
     }
 
     // Bottom panel
     g.setColour(juce::Colour(0xFF222222));
-    g.fillRect(0, getHeight() - 30, getWidth(), 30);
+    g.fillRect(0, getHeight() - 45, getWidth(), 45);
+
+    // Bottom panel labels
+    g.setColour(juce::Colour(0xFFAAAAAA));
+    g.setFont(10.0f);
+    g.drawText("OVERSAMPLING", 10, getHeight() - 40, 100, 15, juce::Justification::centredLeft);
+    g.drawText("QUALITY", 200, getHeight() - 40, 80, 15, juce::Justification::centredLeft);
 }
 
 void Neve1073Editor::resized()
 {
     auto bounds = getLocalBounds();
-    int sectionWidth = bounds.getWidth() / 7;
-    int knobSize = 70;
-    int knobY = 100;
-    int comboHeight = 24;
+    int sectionWidth = (bounds.getWidth() - 60) / 8;  // Account for meters
+    int knobSize = 65;
+    int knobY = 95;
+    int comboHeight = 22;
+    int meterWidth = 15;
 
     // Title
-    titleLabel.setBounds(0, 10, bounds.getWidth(), 30);
+    titleLabel.setBounds(0, 8, bounds.getWidth(), 30);
+
+    // Input VU meter (left edge)
+    inputMeter.setBounds(8, 70, meterWidth, 250);
 
     // Input section
     int section = 0;
-    inputLabel.setBounds(section * sectionWidth, 45, sectionWidth, 20);
-    inputGainSlider.setBounds(section * sectionWidth + (sectionWidth - knobSize) / 2, knobY, knobSize, knobSize + 20);
-    inputDriveSlider.setBounds(section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 100, knobSize, knobSize + 20);
+    int xOffset = 30;
+    inputLabel.setBounds(xOffset + section * sectionWidth, 45, sectionWidth, 20);
+    inputGainSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY, knobSize, knobSize + 18);
+    inputDriveSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 95, knobSize, knobSize + 18);
 
     // Preamp section
     section = 1;
-    preampLabel.setBounds(section * sectionWidth, 45, sectionWidth, 20);
-    preampGainSlider.setBounds(section * sectionWidth + (sectionWidth - knobSize) / 2, knobY, knobSize, knobSize + 20);
-    preampBiasSlider.setBounds(section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 100, knobSize, knobSize + 20);
+    preampLabel.setBounds(xOffset + section * sectionWidth, 45, sectionWidth, 20);
+    preampGainSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY, knobSize, knobSize + 18);
+    preampBiasSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 95, knobSize, knobSize + 18);
 
     // Low EQ section
     section = 2;
-    lowLabel.setBounds(section * sectionWidth, 45, sectionWidth, 20);
-    lowFreqCombo.setBounds(section * sectionWidth + 10, knobY, sectionWidth - 20, comboHeight);
-    lowGainSlider.setBounds(section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 40, knobSize, knobSize + 20);
+    lowLabel.setBounds(xOffset + section * sectionWidth, 45, sectionWidth, 20);
+    lowFreqCombo.setBounds(xOffset + section * sectionWidth + 8, knobY, sectionWidth - 16, comboHeight);
+    lowGainSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 35, knobSize, knobSize + 18);
 
     // Mid EQ section
     section = 3;
-    midLabel.setBounds(section * sectionWidth, 45, sectionWidth, 20);
-    midFreqCombo.setBounds(section * sectionWidth + 10, knobY, sectionWidth - 20, comboHeight);
-    midGainSlider.setBounds(section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 40, knobSize, knobSize + 20);
+    midLabel.setBounds(xOffset + section * sectionWidth, 45, sectionWidth, 20);
+    midFreqCombo.setBounds(xOffset + section * sectionWidth + 8, knobY, sectionWidth - 16, comboHeight);
+    midGainSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 35, knobSize, knobSize + 18);
 
     // High EQ section
     section = 4;
-    highLabel.setBounds(section * sectionWidth, 45, sectionWidth, 20);
-    highGainSlider.setBounds(section * sectionWidth + (sectionWidth - knobSize) / 2, knobY, knobSize, knobSize + 20);
-    eqEnabledButton.setBounds(section * sectionWidth + (sectionWidth - 60) / 2, knobY + 100, 60, 30);
+    highLabel.setBounds(xOffset + section * sectionWidth, 45, sectionWidth, 20);
+    highGainSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY, knobSize, knobSize + 18);
+    eqEnabledButton.setBounds(xOffset + section * sectionWidth + (sectionWidth - 50) / 2, knobY + 95, 50, 25);
 
     // HPF section
     section = 5;
-    hpfLabel.setBounds(section * sectionWidth, 45, sectionWidth, 20);
-    hpfFreqCombo.setBounds(section * sectionWidth + 10, knobY + 30, sectionWidth - 20, comboHeight);
+    hpfLabel.setBounds(xOffset + section * sectionWidth, 45, sectionWidth, 20);
+    hpfFreqCombo.setBounds(xOffset + section * sectionWidth + 8, knobY + 25, sectionWidth - 16, comboHeight);
+
+    // Mix section
+    section = 6;
+    mixLabel.setBounds(xOffset + section * sectionWidth, 45, sectionWidth, 20);
+    mixSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY, knobSize, knobSize + 18);
 
     // Output section
-    section = 6;
-    outputLabel.setBounds(section * sectionWidth, 45, sectionWidth, 20);
-    outputGainSlider.setBounds(section * sectionWidth + (sectionWidth - knobSize) / 2, knobY, knobSize, knobSize + 20);
-    outputDriveSlider.setBounds(section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 100, knobSize, knobSize + 20);
+    section = 7;
+    outputLabel.setBounds(xOffset + section * sectionWidth, 45, sectionWidth, 20);
+    outputGainSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY, knobSize, knobSize + 18);
+    outputDriveSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 95, knobSize, knobSize + 18);
+
+    // Output VU meter (right edge)
+    outputMeter.setBounds(bounds.getWidth() - 23, 70, meterWidth, 250);
+
+    // Bottom panel controls
+    oversamplingCombo.setBounds(10, getHeight() - 25, 100, 20);
+    qualityCombo.setBounds(200, getHeight() - 25, 80, 20);
 }
 
 } // namespace Neve1073

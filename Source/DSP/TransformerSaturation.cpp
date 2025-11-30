@@ -27,6 +27,9 @@ void TransformerSaturation::prepare(double sr, int /*samplesPerBlock*/)
     // LF extraction filter coefficient (~30Hz cutoff)
     lpCoeff = static_cast<float>(1.0 - std::exp(-2.0 * juce::MathConstants<double>::pi * 30.0 / sampleRate));
 
+    // Prepare hysteresis
+    hysteresis.prepare(sr);
+
     reset();
 }
 
@@ -35,21 +38,33 @@ void TransformerSaturation::reset()
     lfState = 0.0f;
     prevInput = 0.0f;
     prevOutput = 0.0f;
+    adaa.reset();
+    hysteresis.reset();
 }
 
 void TransformerSaturation::setDrive(float driveDb)
 {
     drive = std::pow(10.0f, driveDb / 20.0f);
+
+    // Update hysteresis parameters based on drive
+    hysteresis.setDrive(driveDb / 12.0f);  // Normalize to 0-1 range
+    hysteresis.setSaturation(std::min(1.0f, driveDb / 12.0f));
 }
 
 void TransformerSaturation::setDCOffset(float offset)
 {
     dcOffset = juce::jlimit(0.0f, 0.2f, offset);
+    hysteresis.setBias(offset);
 }
 
 void TransformerSaturation::setLowFreqSaturation(float amount)
 {
     lfSatAmount = juce::jlimit(0.0f, 1.0f, amount);
+}
+
+void TransformerSaturation::setQuality(Quality q)
+{
+    quality = q;
 }
 
 float TransformerSaturation::rationalTanh(float x) const
@@ -103,16 +118,39 @@ float TransformerSaturation::processSample(float input)
     float lfEnergy = std::abs(lfState);
     float dynamicDrive = drive * (1.0f + lfEnergy * lfSatAmount * 3.0f);
 
-    // Apply asymmetric saturation
-    float output = asymmetricSaturate(input, dcOffset, dynamicDrive);
+    float output;
+
+    switch (quality)
+    {
+        case Quality::Low:
+            // Basic saturation (fastest)
+            output = asymmetricSaturate(input, dcOffset, dynamicDrive);
+            break;
+
+        case Quality::Medium:
+            // ADAA for cleaner harmonics
+            output = adaa.processAsymmetricSoftClip(input * dynamicDrive, dcOffset);
+            break;
+
+        case Quality::High:
+            // Full hysteresis modeling (most accurate)
+            {
+                float preHyst = input * dynamicDrive;
+                float hystOut = hysteresis.process(preHyst);
+                // Blend hysteresis with ADAA
+                float adaaOut = adaa.processFirstOrderTanh(preHyst);
+                output = hystOut * 0.6f + adaaOut * 0.4f;
+            }
+            break;
+    }
 
     // Soft limiting based on transformer type
     float threshold = (transformerType == Type::Input) ? 0.9f : 0.95f;
     output = softClip(output, threshold);
 
-    // Subtle hysteresis effect (simplified)
-    float hysteresis = 0.02f * (input - prevInput) * (1.0f + std::abs(prevOutput));
-    output += hysteresis * ((transformerType == Type::Input) ? 0.5f : 0.3f);
+    // Subtle inductive effect (high frequency roll-off simulation)
+    float inductance = 0.02f * ((transformerType == Type::Input) ? 0.5f : 0.3f);
+    output += inductance * (input - prevInput) * (1.0f + std::abs(prevOutput));
 
     prevInput = input;
     prevOutput = output;

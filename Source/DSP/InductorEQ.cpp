@@ -19,7 +19,8 @@ void InductorEQ::reset()
 {
     ic1eq = 0.0f;
     ic2eq = 0.0f;
-    inductorState = 0.0f;
+    inductorCurrent = 0.0f;
+    inductorEnergy = 0.0f;
 }
 
 float InductorEQ::getFrequencyHz(Frequency freq) const
@@ -53,9 +54,42 @@ float InductorEQ::getQ(Frequency freq) const
     }
 }
 
+float InductorEQ::getInductance(Frequency freq) const
+{
+    // T1530 inductor taps for lower frequencies
+    // T1280 (200mH) for higher frequencies
+    switch (freq)
+    {
+        case Frequency::Hz360:  return 2.0f;    // 2H
+        case Frequency::Hz700:  return 1.1f;    // 1.1H
+        case Frequency::Hz1600: return 0.45f;   // 0.45H
+        case Frequency::Hz3200: return 0.2f;    // 200mH
+        case Frequency::Hz4800: return 0.2f;    // 200mH
+        case Frequency::Hz7200: return 0.2f;    // 200mH
+        default: return 0.45f;
+    }
+}
+
+float InductorEQ::getDCResistance(Frequency freq) const
+{
+    // DC resistance varies with inductor tap
+    switch (freq)
+    {
+        case Frequency::Hz360:  return 85.0f;   // 85Ω
+        case Frequency::Hz700:  return 59.0f;   // 59Ω
+        case Frequency::Hz1600: return 35.0f;   // 35Ω
+        case Frequency::Hz3200: return 32.0f;   // 32Ω (T1280)
+        case Frequency::Hz4800: return 32.0f;
+        case Frequency::Hz7200: return 32.0f;
+        default: return 35.0f;
+    }
+}
+
 void InductorEQ::setFrequency(Frequency freq)
 {
     currentFreq = freq;
+    inductance = getInductance(freq);
+    dcResistance = getDCResistance(freq);
     calculateCoefficients();
 }
 
@@ -87,6 +121,10 @@ void InductorEQ::calculateCoefficients()
         Q *= (1.0f + gainDb / 72.0f);  // Decrease Q for cut
     }
 
+    // Add DC resistance damping effect (higher resistance = lower Q)
+    float resistanceDamping = 1.0f - (dcResistance / 1000.0f);
+    Q *= resistanceDamping;
+
     // TPT SVF coefficients
     g = static_cast<float>(std::tan(juce::MathConstants<double>::pi * freq / sampleRate));
     k = 1.0f / Q;
@@ -96,24 +134,31 @@ void InductorEQ::calculateCoefficients()
     a3 = g * a2;
 }
 
-float InductorEQ::saturateInductor(float x) const
+float InductorEQ::saturateInductorCore(float current) const
 {
     // Model soft magnetic saturation of inductor core
+    // Based on B-H curve of ferrite/iron core material
     if (inductorSat < 0.001f)
-        return x;
+        return current;
 
-    float threshold = 0.8f;
-    float absX = std::abs(x);
+    // Saturation threshold depends on inductance (larger = saturates easier)
+    float threshold = 0.7f / (1.0f + inductance);
+    float absI = std::abs(current);
 
-    if (absX < threshold)
-        return x;
+    if (absI < threshold)
+        return current;
 
-    float sign = x > 0 ? 1.0f : -1.0f;
-    float excess = absX - threshold;
-    float satAmount = inductorSat * 0.5f;
+    float sign = current > 0 ? 1.0f : -1.0f;
+    float excess = absI - threshold;
 
-    // Soft saturation curve
-    return sign * (threshold + (1.0f - threshold) * std::tanh(excess * (1.0f + satAmount) / (1.0f - threshold)));
+    // Langevin-like saturation curve (realistic for magnetic materials)
+    float satFactor = inductorSat * (1.0f + inductance);
+    float saturated = threshold + (1.0f - threshold) * std::tanh(excess * satFactor / (1.0f - threshold));
+
+    // Add subtle odd harmonics from core saturation
+    float harmonic = 0.02f * inductorSat * excess * excess * sign;
+
+    return sign * saturated + harmonic;
 }
 
 float InductorEQ::processSample(float input)
@@ -131,16 +176,35 @@ float InductorEQ::processSample(float input)
     // Bandpass output (v1 scaled by k)
     float bandpass = v1 * k;
 
-    // Apply inductor saturation to the bandpass (reactive element)
-    float lpCoeff = static_cast<float>(1.0 - std::exp(-2.0 * juce::MathConstants<double>::pi * 100.0 / sampleRate));
-    inductorState += lpCoeff * (bandpass - inductorState);
-    float saturatedBP = saturateInductor(bandpass + inductorState * inductorSat * 0.2f);
+    // Model inductor current and energy storage
+    float T = static_cast<float>(1.0 / sampleRate);
+
+    // Inductor: V = L * dI/dt, so dI = V * dt / L
+    float dI = bandpass * T / inductance;
+    inductorCurrent += dI;
+
+    // Energy dissipation through DC resistance
+    float dissipation = inductorCurrent * dcResistance * T * 0.0001f;
+    inductorCurrent -= dissipation;
+
+    // Apply core saturation to current
+    float saturatedCurrent = saturateInductorCore(inductorCurrent);
+
+    // Energy in inductor: E = 0.5 * L * I^2
+    inductorEnergy = 0.5f * inductance * saturatedCurrent * saturatedCurrent;
+
+    // Modulate bandpass with saturated behavior
+    float satEffect = (inductorCurrent - saturatedCurrent) * inductorSat;
+    float saturatedBP = bandpass - satEffect;
 
     // Peaking EQ output
     // Note: linearGain - 1.0 gives the boost/cut amount
     float gainAmount = linearGain - 1.0f;
 
-    return input + gainAmount * saturatedBP;
+    // Add subtle resonant "ring" based on stored energy
+    float resonance = inductorEnergy * 0.1f * inductorSat;
+
+    return input + gainAmount * saturatedBP + resonance * bandpass;
 }
 
 void InductorEQ::processBlock(float* buffer, int numSamples)
