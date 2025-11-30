@@ -36,6 +36,7 @@ target_sources(Neve1073
     PRIVATE
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
+        Source/PresetManager.cpp
         Source/DSP/TransformerSaturation.cpp
         Source/DSP/PreampStage.cpp
         Source/DSP/InductorEQ.cpp
