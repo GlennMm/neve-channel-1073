@@ -201,6 +201,10 @@ void Neve1073Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear(i, 0, buffer.getNumSamples());
 
+    // Safety check - ensure oversampling is initialized
+    if (oversampling == nullptr)
+        return;
+
     // Update parameters
     updateDSPFromParameters();
 
