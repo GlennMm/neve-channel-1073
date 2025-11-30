@@ -9,6 +9,7 @@
 #include "DSP/ShelfEQ.h"
 #include "DSP/HighPassFilter.h"
 #include "DSP/ParameterSmoothing.h"
+#include "PresetManager.h"
 
 namespace Neve1073
 {
@@ -52,6 +53,9 @@ public:
     // Parameter tree
     juce::AudioProcessorValueTreeState& getParameters() { return parameters; }
 
+    // Preset manager
+    PresetManager& getPresetManager() { return presetManager; }
+
     // VU meter levels (for GUI)
     float getInputLevel() const { return inputLevel.load(); }
     float getOutputLevel() const { return outputLevel.load(); }
@@ -77,6 +81,9 @@ public:
 private:
     juce::AudioProcessorValueTreeState parameters;
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+
+    // Preset management
+    PresetManager presetManager{parameters};
 
     // DSP components (per channel)
     std::array<TransformerSaturation, 2> inputTransformers;

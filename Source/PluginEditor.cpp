@@ -161,6 +161,37 @@ void Neve1073Editor::VintageLookAndFeel::drawComboBox(
     g.fillPath(arrow);
 }
 
+void Neve1073Editor::VintageLookAndFeel::drawButtonBackground(
+    juce::Graphics& g, juce::Button& button,
+    const juce::Colour& backgroundColour,
+    bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown)
+{
+    auto bounds = button.getLocalBounds().toFloat();
+
+    // Button gradient
+    auto baseColour = shouldDrawButtonAsDown ? backgroundColour.darker(0.2f) : backgroundColour;
+    juce::ColourGradient bgGradient(
+        baseColour.brighter(0.1f), 0, bounds.getY(),
+        baseColour.darker(0.1f), 0, bounds.getBottom(), false);
+    g.setGradientFill(bgGradient);
+    g.fillRoundedRectangle(bounds, 3.0f);
+
+    // Highlight on hover
+    if (shouldDrawButtonAsHighlighted && !shouldDrawButtonAsDown)
+    {
+        g.setColour(juce::Colours::white.withAlpha(0.1f));
+        g.fillRoundedRectangle(bounds, 3.0f);
+    }
+
+    // Top highlight
+    g.setColour(baseColour.brighter(0.3f).withAlpha(0.4f));
+    g.drawHorizontalLine((int)bounds.getY() + 1, bounds.getX() + 2, bounds.getRight() - 2);
+
+    // Border
+    g.setColour(baseColour.darker(0.3f));
+    g.drawRoundedRectangle(bounds.reduced(0.5f), 3.0f, 1.0f);
+}
+
 void Neve1073Editor::VintageLookAndFeel::drawToggleButton(
     juce::Graphics& g, juce::ToggleButton& button,
     bool shouldDrawButtonAsHighlighted, bool /*shouldDrawButtonAsDown*/)
@@ -333,6 +364,26 @@ Neve1073Editor::Neve1073Editor(Neve1073Processor& p)
     qualityAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
         params, Neve1073Processor::PARAM_QUALITY, qualityCombo);
 
+    // Preset controls
+    presetCombo.setColour(juce::ComboBox::textColourId, NeveColors::cream);
+    presetCombo.setColour(juce::ComboBox::backgroundColourId, NeveColors::panelMid);
+    presetCombo.setColour(juce::ComboBox::outlineColourId, NeveColors::panelLight);
+    presetCombo.onChange = [this] { onPresetSelected(); };
+    addAndMakeVisible(presetCombo);
+    updatePresetList();
+
+    // Save button
+    savePresetButton.setColour(juce::TextButton::buttonColourId, NeveColors::neveBlue);
+    savePresetButton.setColour(juce::TextButton::textColourOffId, NeveColors::cream);
+    savePresetButton.onClick = [this] { onSavePreset(); };
+    addAndMakeVisible(savePresetButton);
+
+    // Delete button
+    deletePresetButton.setColour(juce::TextButton::buttonColourId, NeveColors::panelMid);
+    deletePresetButton.setColour(juce::TextButton::textColourOffId, NeveColors::cream);
+    deletePresetButton.onClick = [this] { onDeletePreset(); };
+    addAndMakeVisible(deletePresetButton);
+
     setSize(900, 420);
 }
 
@@ -446,6 +497,7 @@ void Neve1073Editor::paint(juce::Graphics& g)
     g.setFont(juce::Font(10.0f, juce::Font::bold));
     g.drawText("OVERSAMPLING", 10, getHeight() - 43, 100, 14, juce::Justification::centredLeft);
     g.drawText("QUALITY", 200, getHeight() - 43, 80, 14, juce::Justification::centredLeft);
+    g.drawText("PRESET", getWidth() - 320, getHeight() - 43, 80, 14, juce::Justification::centredLeft);
 
     // VU Meter labels
     g.setColour(NeveColors::cream.withAlpha(0.6f));
@@ -552,6 +604,137 @@ void Neve1073Editor::resized()
     // Bottom panel controls
     oversamplingCombo.setBounds(10, getHeight() - 28, 110, 22);
     qualityCombo.setBounds(200, getHeight() - 28, 90, 22);
+
+    // Preset controls (right side of bottom panel)
+    int presetX = getWidth() - 320;
+    presetCombo.setBounds(presetX, getHeight() - 28, 200, 22);
+    savePresetButton.setBounds(presetX + 205, getHeight() - 28, 50, 22);
+    deletePresetButton.setBounds(presetX + 260, getHeight() - 28, 40, 22);
+}
+
+void Neve1073Editor::updatePresetList()
+{
+    auto& pm = processorRef.getPresetManager();
+    presetCombo.clear(juce::dontSendNotification);
+
+    // Add factory presets first
+    auto factoryPresets = pm.getFactoryPresetNames();
+    int itemId = 1;
+
+    presetCombo.addSectionHeading("Factory Presets");
+    for (const auto& name : factoryPresets)
+    {
+        presetCombo.addItem(name, itemId++);
+    }
+
+    // Add user presets if any exist
+    auto userPresets = pm.getUserPresetNames();
+    if (!userPresets.isEmpty())
+    {
+        presetCombo.addSeparator();
+        presetCombo.addSectionHeading("User Presets");
+        for (const auto& name : userPresets)
+        {
+            presetCombo.addItem(name, itemId++);
+        }
+    }
+
+    // Select current preset
+    auto currentPreset = pm.getCurrentPresetName();
+    for (int i = 0; i < presetCombo.getNumItems(); ++i)
+    {
+        if (presetCombo.getItemText(i) == currentPreset)
+        {
+            presetCombo.setSelectedItemIndex(i, juce::dontSendNotification);
+            break;
+        }
+    }
+}
+
+void Neve1073Editor::onPresetSelected()
+{
+    auto selectedName = presetCombo.getText();
+    if (selectedName.isNotEmpty())
+    {
+        processorRef.getPresetManager().loadPreset(selectedName);
+    }
+}
+
+void Neve1073Editor::onSavePreset()
+{
+    auto& pm = processorRef.getPresetManager();
+
+    // Create alert window for preset name
+    auto* alertWindow = new juce::AlertWindow(
+        "Save Preset",
+        "Enter a name for your preset:",
+        juce::MessageBoxIconType::QuestionIcon);
+
+    alertWindow->addTextEditor("presetName", pm.getCurrentPresetName(), "Preset Name:");
+    alertWindow->addButton("Save", 1);
+    alertWindow->addButton("Cancel", 0);
+
+    alertWindow->enterModalState(true, juce::ModalCallbackFunction::create(
+        [this, alertWindow](int result)
+        {
+            if (result == 1)
+            {
+                auto name = alertWindow->getTextEditorContents("presetName");
+                if (name.isNotEmpty())
+                {
+                    // Check if it's a factory preset name
+                    auto factoryNames = processorRef.getPresetManager().getFactoryPresetNames();
+                    if (factoryNames.contains(name))
+                    {
+                        juce::AlertWindow::showMessageBoxAsync(
+                            juce::MessageBoxIconType::WarningIcon,
+                            "Cannot Overwrite",
+                            "Cannot overwrite factory presets. Please choose a different name.");
+                    }
+                    else
+                    {
+                        processorRef.getPresetManager().saveUserPreset(name);
+                        updatePresetList();
+                    }
+                }
+            }
+            delete alertWindow;
+        }), true);
+}
+
+void Neve1073Editor::onDeletePreset()
+{
+    auto& pm = processorRef.getPresetManager();
+    auto currentPreset = presetCombo.getText();
+
+    // Check if it's a user preset (not factory)
+    auto info = pm.getPresetInfo(currentPreset);
+    if (info.isFactory)
+    {
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::WarningIcon,
+            "Cannot Delete",
+            "Factory presets cannot be deleted.");
+        return;
+    }
+
+    // Confirm deletion
+    juce::AlertWindow::showOkCancelBox(
+        juce::MessageBoxIconType::QuestionIcon,
+        "Delete Preset",
+        "Are you sure you want to delete \"" + currentPreset + "\"?",
+        "Delete", "Cancel",
+        this,
+        juce::ModalCallbackFunction::create(
+            [this, currentPreset](int result)
+            {
+                if (result == 1)
+                {
+                    processorRef.getPresetManager().deleteUserPreset(currentPreset);
+                    processorRef.getPresetManager().loadPreset("Init");
+                    updatePresetList();
+                }
+            }));
 }
 
 } // namespace Neve1073

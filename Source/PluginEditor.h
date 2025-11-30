@@ -158,6 +158,10 @@ private:
         void drawToggleButton(juce::Graphics& g, juce::ToggleButton& button,
                               bool shouldDrawButtonAsHighlighted,
                               bool shouldDrawButtonAsDown) override;
+        void drawButtonBackground(juce::Graphics& g, juce::Button& button,
+                                  const juce::Colour& backgroundColour,
+                                  bool shouldDrawButtonAsHighlighted,
+                                  bool shouldDrawButtonAsDown) override;
     };
 
     VintageLookAndFeel vintageLnF;
@@ -229,9 +233,18 @@ private:
     juce::Label outputLabel{"", "OUTPUT"};
     juce::Label mixLabel{"", "MIX"};
 
+    // Preset controls
+    juce::ComboBox presetCombo;
+    juce::TextButton savePresetButton{"Save"};
+    juce::TextButton deletePresetButton{"Del"};
+
     void setupSlider(juce::Slider& slider, const juce::String& suffix = "");
     void setupComboBox(juce::ComboBox& combo);
     void setupLabel(juce::Label& label);
+    void updatePresetList();
+    void onPresetSelected();
+    void onSavePreset();
+    void onDeletePreset();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Neve1073Editor)
 };
