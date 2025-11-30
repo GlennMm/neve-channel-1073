@@ -99,8 +99,14 @@ Neve1073Editor::Neve1073Editor(Neve1073Processor& p)
     setupSlider(outputGainSlider, " dB");
     setupSlider(outputDriveSlider, " dB");
 
+    // Setup combo boxes with their options
+    lowFreqCombo.addItemList({"35 Hz", "60 Hz", "110 Hz", "220 Hz"}, 1);
     setupComboBox(lowFreqCombo);
+
+    midFreqCombo.addItemList({"360 Hz", "700 Hz", "1.6 kHz", "3.2 kHz", "4.8 kHz", "7.2 kHz"}, 1);
     setupComboBox(midFreqCombo);
+
+    hpfFreqCombo.addItemList({"Off", "50 Hz", "80 Hz", "160 Hz", "300 Hz"}, 1);
     setupComboBox(hpfFreqCombo);
 
     // Title
