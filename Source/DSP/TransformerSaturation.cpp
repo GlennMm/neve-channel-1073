@@ -101,16 +101,6 @@ float TransformerSaturation::asymmetricSaturate(float x, float offset, float drv
 
 float TransformerSaturation::processSample(float input)
 {
-    // Gate silence to prevent DC drift
-    if (std::abs(input) < 1e-8f && std::abs(prevInput) < 1e-8f)
-    {
-        lfState *= 0.999f;
-        prevInput = 0.0f;
-        prevOutput *= 0.999f;
-        dcBlockState *= 0.999f;
-        return 0.0f;
-    }
-
     // Extract low frequency content
     lfState += lpCoeff * (input - lfState);
 
@@ -147,11 +137,11 @@ float TransformerSaturation::processSample(float input)
     float threshold = (transformerType == Type::Input) ? 0.92f : 0.96f;
     output = softClip(output, threshold);
 
-    // Subtle inductive effect
-    float inductance = 0.01f * ((transformerType == Type::Input) ? 0.4f : 0.2f);
+    // Subtle inductive effect (reduced to prevent artifacts)
+    float inductance = 0.005f * ((transformerType == Type::Input) ? 0.3f : 0.15f);
     output += inductance * (input - prevInput);
 
-    // DC blocking filter
+    // DC blocking filter (handles any DC offset naturally)
     dcBlockState += dcBlockCoeff * (output - dcBlockState);
     output = output - dcBlockState;
 

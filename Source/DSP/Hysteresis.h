@@ -59,37 +59,26 @@ public:
 
     float process(float input)
     {
-        // Gate very small signals to prevent noise/drift
-        if (std::abs(input) < 1e-6f)
-        {
-            // Decay state toward zero
-            M *= 0.9999;
-            M_prev = M;
-            H_prev = 0.0;
-            return 0.0f;
-        }
-
         double H_input = static_cast<double>(input);
 
         // Calculate dH/dt
         double dH = H_input - H_prev;
 
         // Langevin function for anhysteretic magnetization
-        double He = H_input + alpha * M + dcBias;  // Apply bias here
+        double He = H_input + alpha * M + dcBias;
         double Man = langevin(He);
 
         // Calculate dM/dt using simplified J-A equation
         double dM_dH = 0.0;
-        if (std::abs(dH) > 1e-10)
+        if (std::abs(dH) > 1e-12)
         {
             double delta = (dH >= 0) ? 1.0 : -1.0;
             double denom = k * delta - alpha * (Man - M);
 
-            if (std::abs(denom) > 1e-10)
+            if (std::abs(denom) > 1e-12)
             {
                 dM_dH = (Man - M) / denom;
-                // Clamp to prevent instability
-                dM_dH = std::clamp(dM_dH, -10.0, 10.0);
+                dM_dH = std::clamp(dM_dH, -5.0, 5.0);
             }
         }
 
