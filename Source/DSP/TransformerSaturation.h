@@ -66,6 +66,12 @@ private:
     float prevOutput = 0.0f;
     float dcBlockState = 0.0f;
 
+    // Envelope follower for smooth noise gating
+    float envelope = 0.0f;
+    float envelopeAttack = 0.01f;
+    float envelopeRelease = 0.0001f;
+    static constexpr float noiseThreshold = 0.0001f;
+
     // Filter coefficients
     float lpCoeff = 0.001f;
     float dcBlockCoeff = 0.001f;

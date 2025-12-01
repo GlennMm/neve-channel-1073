@@ -40,6 +40,7 @@ void TransformerSaturation::reset()
     prevInput = 0.0f;
     prevOutput = 0.0f;
     dcBlockState = 0.0f;
+    envelope = 0.0f;
     adaa.reset();
     hysteresis.reset();
 }
@@ -101,6 +102,20 @@ float TransformerSaturation::asymmetricSaturate(float x, float offset, float drv
 
 float TransformerSaturation::processSample(float input)
 {
+    // Envelope follower for smooth gating on silence
+    float absInput = std::abs(input);
+    if (absInput > envelope)
+        envelope += envelopeAttack * (absInput - envelope);
+    else
+        envelope += envelopeRelease * (absInput - envelope);
+
+    // If signal is very quiet, pass through with minimal processing
+    if (envelope < noiseThreshold)
+    {
+        prevInput = input;
+        return input;
+    }
+
     // Extract low frequency content
     lfState += lpCoeff * (input - lfState);
 

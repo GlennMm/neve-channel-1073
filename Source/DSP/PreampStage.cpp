@@ -18,6 +18,7 @@ void PreampStage::reset()
 {
     capacitorState = 0.0f;
     prevSample = 0.0f;
+    envelope = 0.0f;
 }
 
 void PreampStage::setGain(float gainDb)
@@ -91,6 +92,18 @@ float PreampStage::transistorSaturate(float x) const
 
 float PreampStage::processSample(float input)
 {
+    // Envelope follower for smooth gating on silence
+    float absInput = std::abs(input);
+    float envCoeff = (absInput > envelope) ? 0.01f : 0.0001f;
+    envelope += envCoeff * (absInput - envelope);
+
+    // If signal is very quiet, pass through with minimal processing
+    if (envelope < noiseThreshold)
+    {
+        prevSample = input;
+        return input * gain;  // Still apply gain but skip nonlinear processing
+    }
+
     // Input coupling capacitor (blocks DC, 6.8-22µF tantalum)
     // High-pass at ~7Hz
     float hpCoeff = static_cast<float>(1.0 - std::exp(-2.0 * juce::MathConstants<double>::pi * 7.0 / sampleRate));

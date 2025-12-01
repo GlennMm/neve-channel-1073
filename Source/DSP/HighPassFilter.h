@@ -39,28 +39,18 @@ public:
     void processBlock(float* buffer, int numSamples);
 
 private:
-    double sampleRate = 44100.0;
+    double currentSampleRate = 44100.0;
 
     bool enabled = false;
-    float frequency = 80.0f;
+    float cutoffFrequency = 80.0f;
+    Frequency currentFreq = Frequency::Off;
 
-    // Third-order Butterworth HPF state (cascaded biquad + first order)
-    // Biquad state
-    float x1 = 0.0f, x2 = 0.0f;
-    float y1 = 0.0f, y2 = 0.0f;
+    // Use JUCE IIR filters for reliability - two cascaded second-order for 4th order (24dB/oct)
+    // or three first-order for 3rd order (18dB/oct)
+    juce::dsp::IIR::Filter<float> hpf1;  // First 2nd-order section
+    juce::dsp::IIR::Filter<float> hpf2;  // Second 2nd-order section (makes it 4th order)
 
-    // First-order state
-    float z1 = 0.0f;
-
-    // Biquad coefficients
-    float b0 = 1.0f, b1 = 0.0f, b2 = 0.0f;
-    float a1 = 0.0f, a2 = 0.0f;
-
-    // First-order coefficients
-    float c0 = 1.0f, c1 = 0.0f;
-    float d1 = 0.0f;
-
-    void calculateCoefficients();
+    void updateCoefficients();
 };
 
 } // namespace Neve1073

@@ -45,6 +45,10 @@ private:
     float capacitorState = 0.0f;  // Input coupling capacitor
     float prevSample = 0.0f;
 
+    // Envelope follower for smooth noise gating
+    float envelope = 0.0f;
+    static constexpr float noiseThreshold = 0.0001f;
+
     // Processing
     float asymmetricClip(float x, float bias) const;
     float transistorSaturate(float x) const;
