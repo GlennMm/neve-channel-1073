@@ -3,306 +3,388 @@
 namespace Neve1073
 {
 
-// Neve Look and Feel Implementation
-Neve1073Editor::NeveLookAndFeel::NeveLookAndFeel()
+// Classic Neve colors
+namespace NeveColors
 {
-    setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xFF1E2D45));
-    setColour(juce::ComboBox::textColourId, juce::Colour(0xFFE8E4DC));
-    setColour(juce::ComboBox::outlineColourId, juce::Colour(0xFF3A5070));
-    setColour(juce::PopupMenu::backgroundColourId, juce::Colour(0xFF1E2D45));
-    setColour(juce::PopupMenu::textColourId, juce::Colour(0xFFE8E4DC));
-    setColour(juce::PopupMenu::highlightedBackgroundColourId, juce::Colour(0xFF2B3D5B));
+    const juce::Colour neveBlue(0xFF344B7A);
+    const juce::Colour neveBlueDark(0xFF263757);
+    const juce::Colour neveBlueLight(0xFF4A6499);
+    const juce::Colour panelDark(0xFF1E1E1E);
+    const juce::Colour panelMid(0xFF2D2D2D);
+    const juce::Colour panelLight(0xFF3D3D3D);
+    const juce::Colour metalLight(0xFFC8C8C8);
+    const juce::Colour metalMid(0xFFA0A0A0);
+    const juce::Colour metalDark(0xFF707070);
+    const juce::Colour cream(0xFFE8E0D0);
+    const juce::Colour creamDark(0xFFD0C8B8);
+    const juce::Colour knobSilver(0xFFB8B8B8);
+    const juce::Colour indicatorRed(0xFFCC3333);
+    const juce::Colour indicatorGreen(0xFF33AA33);
 }
 
-void Neve1073Editor::NeveLookAndFeel::drawChickenHeadKnob(
-    juce::Graphics& g, float cx, float cy, float radius,
-    float angle, juce::Colour baseColor, bool /*isLarge*/)
+// Vintage Look and Feel
+Neve1073Editor::VintageLookAndFeel::VintageLookAndFeel()
 {
-    // Shadow
-    g.setColour(juce::Colours::black.withAlpha(0.5f));
-    g.fillEllipse(cx - radius + 3, cy - radius + 4, radius * 2, radius * 2);
-
-    // Outer rim (darker)
-    g.setColour(baseColor.darker(0.4f));
-    g.fillEllipse(cx - radius, cy - radius, radius * 2, radius * 2);
-
-    // Main knob body with gradient
-    float innerRadius = radius * 0.9f;
-    juce::ColourGradient knobGradient(
-        baseColor.brighter(0.3f), cx - innerRadius * 0.3f, cy - innerRadius * 0.3f,
-        baseColor.darker(0.3f), cx + innerRadius * 0.3f, cy + innerRadius * 0.3f, true);
-    g.setGradientFill(knobGradient);
-    g.fillEllipse(cx - innerRadius, cy - innerRadius, innerRadius * 2, innerRadius * 2);
-
-    // Highlight arc (top)
-    g.setColour(juce::Colours::white.withAlpha(0.2f));
-    juce::Path highlight;
-    highlight.addArc(cx - innerRadius + 3, cy - innerRadius + 3,
-                     (innerRadius - 3) * 2, (innerRadius - 3) * 2,
-                     -juce::MathConstants<float>::pi * 0.8f,
-                     -juce::MathConstants<float>::pi * 0.2f, true);
-    g.strokePath(highlight, juce::PathStrokeType(3.0f));
-
-    // Pointer (chicken head shape) - white/cream colored
-    juce::Path pointer;
-    float pointerLength = radius * 0.75f;
-    float pointerBaseWidth = radius * 0.4f;
-    float pointerTipWidth = radius * 0.15f;
-
-    // Tapered pointer shape
-    pointer.startNewSubPath(0, -pointerLength);  // Tip
-    pointer.lineTo(-pointerTipWidth, -pointerLength * 0.7f);
-    pointer.lineTo(-pointerBaseWidth * 0.5f, -pointerLength * 0.2f);
-    pointer.lineTo(-pointerBaseWidth * 0.3f, pointerLength * 0.15f);
-    pointer.lineTo(pointerBaseWidth * 0.3f, pointerLength * 0.15f);
-    pointer.lineTo(pointerBaseWidth * 0.5f, -pointerLength * 0.2f);
-    pointer.lineTo(pointerTipWidth, -pointerLength * 0.7f);
-    pointer.closeSubPath();
-
-    pointer.applyTransform(juce::AffineTransform::rotation(angle).translated(cx, cy));
-
-    // Pointer shadow
-    g.setColour(juce::Colours::black.withAlpha(0.6f));
-    g.fillPath(pointer, juce::AffineTransform::translation(1.5f, 1.5f));
-
-    // Pointer fill
-    g.setColour(juce::Colour(0xFFF0EBE0));
-    g.fillPath(pointer);
-
-    // Pointer edge highlight
-    g.setColour(juce::Colours::white.withAlpha(0.3f));
-    g.strokePath(pointer, juce::PathStrokeType(0.5f));
+    setColour(juce::Slider::rotarySliderFillColourId, NeveColors::neveBlue);
+    setColour(juce::Slider::thumbColourId, NeveColors::cream);
+    setColour(juce::ComboBox::backgroundColourId, NeveColors::neveBlueDark);
+    setColour(juce::ComboBox::textColourId, NeveColors::cream);
+    setColour(juce::ComboBox::outlineColourId, NeveColors::neveBlueLight);
+    setColour(juce::PopupMenu::backgroundColourId, NeveColors::panelDark);
+    setColour(juce::PopupMenu::textColourId, NeveColors::cream);
+    setColour(juce::PopupMenu::highlightedBackgroundColourId, NeveColors::neveBlue);
+    setColour(juce::PopupMenu::highlightedTextColourId, juce::Colours::white);
 }
 
-void Neve1073Editor::NeveLookAndFeel::drawRotarySelectorKnob(
-    juce::Graphics& g, float cx, float cy, float radius,
-    float angle, int /*numPositions*/, const juce::StringArray& /*labels*/)
-{
-    // Shadow
-    g.setColour(juce::Colours::black.withAlpha(0.5f));
-    g.fillEllipse(cx - radius + 3, cy - radius + 4, radius * 2, radius * 2);
-
-    // Outer chrome ring
-    juce::ColourGradient chromeGradient(
-        juce::Colour(0xFFD8D8D8), cx - radius, cy - radius,
-        juce::Colour(0xFF505050), cx + radius, cy + radius, false);
-    g.setGradientFill(chromeGradient);
-    g.fillEllipse(cx - radius, cy - radius, radius * 2, radius * 2);
-
-    // Inner knob body (dark gray with texture)
-    float innerRadius = radius * 0.82f;
-    juce::ColourGradient knobGradient(
-        juce::Colour(0xFF5A5A5A), cx, cy - innerRadius,
-        juce::Colour(0xFF2A2A2A), cx, cy + innerRadius, false);
-    g.setGradientFill(knobGradient);
-    g.fillEllipse(cx - innerRadius, cy - innerRadius, innerRadius * 2, innerRadius * 2);
-
-    // Knurled texture (radial lines)
-    g.setColour(juce::Colours::black.withAlpha(0.25f));
-    for (int i = 0; i < 36; ++i)
-    {
-        float tickAngle = (float)i * juce::MathConstants<float>::twoPi / 36.0f;
-        float x1 = cx + std::cos(tickAngle) * innerRadius * 0.35f;
-        float y1 = cy + std::sin(tickAngle) * innerRadius * 0.35f;
-        float x2 = cx + std::cos(tickAngle) * innerRadius * 0.92f;
-        float y2 = cy + std::sin(tickAngle) * innerRadius * 0.92f;
-        g.drawLine(x1, y1, x2, y2, 1.0f);
-    }
-
-    // White pointer line
-    juce::Path pointer;
-    pointer.addRectangle(-2.5f, -innerRadius * 0.92f, 5.0f, innerRadius * 0.55f);
-    pointer.applyTransform(juce::AffineTransform::rotation(angle).translated(cx, cy));
-
-    g.setColour(juce::Colours::black.withAlpha(0.5f));
-    g.fillPath(pointer, juce::AffineTransform::translation(1.0f, 1.0f));
-
-    g.setColour(juce::Colour(0xFFF0EBE0));
-    g.fillPath(pointer);
-
-    // Center cap
-    float capRadius = innerRadius * 0.22f;
-    juce::ColourGradient capGradient(
-        juce::Colour(0xFF808080), cx - capRadius, cy - capRadius,
-        juce::Colour(0xFF404040), cx + capRadius, cy + capRadius, false);
-    g.setGradientFill(capGradient);
-    g.fillEllipse(cx - capRadius, cy - capRadius, capRadius * 2, capRadius * 2);
-}
-
-void Neve1073Editor::NeveLookAndFeel::drawRotarySlider(
+void Neve1073Editor::VintageLookAndFeel::drawRotarySlider(
     juce::Graphics& g, int x, int y, int width, int height,
     float sliderPos, float rotaryStartAngle, float rotaryEndAngle, juce::Slider& slider)
 {
-    auto radius = (float)juce::jmin(width / 2, height / 2) - 4.0f;
+    auto radius = (float)juce::jmin(width / 2, height / 2) - 6.0f;
     auto centreX = (float)x + (float)width * 0.5f;
     auto centreY = (float)y + (float)height * 0.5f;
     auto angle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
 
-    juce::String name = slider.getName();
+    // Knob base shadow
+    g.setColour(juce::Colours::black.withAlpha(0.5f));
+    g.fillEllipse(centreX - radius + 2, centreY - radius + 3, radius * 2.0f, radius * 2.0f);
 
-    if (name.contains("MicGain"))
+    // Outer ring (chrome bezel)
+    float bezelWidth = radius * 0.12f;
+    juce::ColourGradient bezelGradient(
+        NeveColors::metalLight, centreX - radius, centreY - radius,
+        NeveColors::metalDark, centreX + radius, centreY + radius, false);
+    g.setGradientFill(bezelGradient);
+    g.fillEllipse(centreX - radius, centreY - radius, radius * 2.0f, radius * 2.0f);
+
+    // Inner knob body
+    float innerRadius = radius - bezelWidth;
+
+    // Knob gradient (3D effect)
+    juce::ColourGradient knobGradient(
+        NeveColors::panelLight, centreX, centreY - innerRadius,
+        NeveColors::panelDark, centreX, centreY + innerRadius, false);
+    g.setGradientFill(knobGradient);
+    g.fillEllipse(centreX - innerRadius, centreY - innerRadius, innerRadius * 2.0f, innerRadius * 2.0f);
+
+    // Subtle radial texture on knob
+    for (int i = 0; i < 36; ++i)
     {
-        drawChickenHeadKnob(g, centreX, centreY, radius, angle, juce::Colour(0xFFBB2222), true);
+        float tickAngle = (float)i * juce::MathConstants<float>::twoPi / 36.0f;
+        float x1 = centreX + std::cos(tickAngle) * innerRadius * 0.3f;
+        float y1 = centreY + std::sin(tickAngle) * innerRadius * 0.3f;
+        float x2 = centreX + std::cos(tickAngle) * innerRadius * 0.85f;
+        float y2 = centreY + std::sin(tickAngle) * innerRadius * 0.85f;
+        g.setColour(juce::Colours::black.withAlpha(0.1f));
+        g.drawLine(x1, y1, x2, y2, 0.5f);
     }
-    else if (name.contains("LineGain"))
+
+    // Position indicator (classic white line)
+    juce::Path pointer;
+    float pointerLength = innerRadius * 0.75f;
+    float pointerWidth = 3.0f;
+    pointer.addRoundedRectangle(-pointerWidth * 0.5f, -innerRadius + 4.0f,
+                                 pointerWidth, pointerLength, 1.5f);
+    pointer.applyTransform(juce::AffineTransform::rotation(angle).translated(centreX, centreY));
+
+    // Pointer shadow
+    g.setColour(juce::Colours::black.withAlpha(0.4f));
+    g.fillPath(pointer, juce::AffineTransform::translation(1.0f, 1.0f));
+
+    // Pointer fill
+    g.setColour(NeveColors::cream);
+    g.fillPath(pointer);
+
+    // Center cap
+    float capRadius = innerRadius * 0.25f;
+    juce::ColourGradient capGradient(
+        NeveColors::metalLight, centreX - capRadius, centreY - capRadius,
+        NeveColors::metalDark, centreX + capRadius, centreY + capRadius, false);
+    g.setGradientFill(capGradient);
+    g.fillEllipse(centreX - capRadius, centreY - capRadius, capRadius * 2.0f, capRadius * 2.0f);
+
+    // Draw tick marks around the knob
+    g.setColour(NeveColors::cream.withAlpha(0.6f));
+    int numTicks = 11;
+    for (int i = 0; i < numTicks; ++i)
     {
-        drawChickenHeadKnob(g, centreX, centreY, radius, angle, juce::Colour(0xFF606060), true);
+        float tickAngle = rotaryStartAngle + (float)i / (float)(numTicks - 1) * (rotaryEndAngle - rotaryStartAngle);
+        float tickInner = radius + 4.0f;
+        float tickOuter = radius + 8.0f;
+        float x1 = centreX + std::cos(tickAngle) * tickInner;
+        float y1 = centreY + std::sin(tickAngle) * tickInner;
+        float x2 = centreX + std::cos(tickAngle) * tickOuter;
+        float y2 = centreY + std::sin(tickAngle) * tickOuter;
+
+        // Thicker tick at center (0 position for bipolar)
+        float thickness = (i == numTicks / 2) ? 2.0f : 1.0f;
+        g.drawLine(x1, y1, x2, y2, thickness);
     }
-    else if (name.contains("Freq") || name.contains("HPF"))
-    {
-        drawRotarySelectorKnob(g, centreX, centreY, radius, angle, 6, {});
-    }
-    else
-    {
-        // Small gain knobs
-        drawChickenHeadKnob(g, centreX, centreY, radius, angle, juce::Colour(0xFF505050), false);
-    }
+
+    (void)slider; // Unused
 }
 
-void Neve1073Editor::NeveLookAndFeel::drawToggleButton(
-    juce::Graphics& g, juce::ToggleButton& button,
-    bool shouldDrawButtonAsHighlighted, bool /*shouldDrawButtonAsDown*/)
-{
-    auto bounds = button.getLocalBounds().toFloat().reduced(1.0f);
-    bool isOn = button.getToggleState();
-
-    // Button background
-    g.setColour(juce::Colour(0xFF151515));
-    g.fillRoundedRectangle(bounds, 4.0f);
-
-    auto innerBounds = bounds.reduced(2.0f);
-    g.setColour(isOn ? juce::Colour(0xFF2A3A50) : juce::Colour(0xFF202020));
-    g.fillRoundedRectangle(innerBounds, 3.0f);
-
-    if (shouldDrawButtonAsHighlighted)
-    {
-        g.setColour(juce::Colours::white.withAlpha(0.08f));
-        g.fillRoundedRectangle(innerBounds, 3.0f);
-    }
-
-    // LED indicator
-    float ledRadius = 5.0f;
-    float ledX = bounds.getCentreX();
-    float ledY = bounds.getY() + 12.0f;
-
-    if (isOn)
-    {
-        g.setColour(juce::Colour(0xFF00FF00).withAlpha(0.4f));
-        g.fillEllipse(ledX - ledRadius - 4, ledY - ledRadius - 4,
-                      (ledRadius + 4) * 2, (ledRadius + 4) * 2);
-    }
-
-    g.setColour(isOn ? juce::Colour(0xFF00DD00) : juce::Colour(0xFF2A2A2A));
-    g.fillEllipse(ledX - ledRadius, ledY - ledRadius, ledRadius * 2, ledRadius * 2);
-
-    g.setColour(juce::Colours::white.withAlpha(0.4f));
-    g.fillEllipse(ledX - ledRadius + 1.5f, ledY - ledRadius + 1.5f, ledRadius * 0.7f, ledRadius * 0.7f);
-
-    // Text
-    g.setColour(juce::Colour(0xFFE8E4DC));
-    g.setFont(juce::Font(10.0f, juce::Font::bold));
-    g.drawText(button.getButtonText(), bounds.withTrimmedTop(22.0f),
-               juce::Justification::centred);
-}
-
-void Neve1073Editor::NeveLookAndFeel::drawComboBox(
-    juce::Graphics& g, int width, int height, bool /*isButtonDown*/,
+void Neve1073Editor::VintageLookAndFeel::drawComboBox(
+    juce::Graphics& g, int width, int height, bool isButtonDown,
     int /*buttonX*/, int /*buttonY*/, int /*buttonW*/, int /*buttonH*/,
     juce::ComboBox& box)
 {
     auto bounds = juce::Rectangle<float>(0, 0, (float)width, (float)height);
 
-    g.setColour(juce::Colour(0xFF1A2535));
+    // Background with beveled edge effect
+    juce::ColourGradient bgGradient(
+        isButtonDown ? NeveColors::neveBlueDark : NeveColors::neveBlue,
+        0, 0,
+        NeveColors::neveBlueDark,
+        0, (float)height, false);
+    g.setGradientFill(bgGradient);
     g.fillRoundedRectangle(bounds, 3.0f);
 
-    g.setColour(juce::Colour(0xFF3A5070));
+    // Top highlight
+    g.setColour(NeveColors::neveBlueLight.withAlpha(0.4f));
+    g.drawHorizontalLine(1, 2.0f, (float)width - 2.0f);
+
+    // Bottom shadow
+    g.setColour(juce::Colours::black.withAlpha(0.3f));
+    g.drawHorizontalLine(height - 2, 2.0f, (float)width - 2.0f);
+
+    // Border
+    g.setColour(NeveColors::neveBlueDark);
     g.drawRoundedRectangle(bounds.reduced(0.5f), 3.0f, 1.0f);
 
+    // Arrow
     juce::Path arrow;
-    float arrowX = (float)width - 10.0f;
+    float arrowX = (float)width - 15.0f;
     float arrowY = (float)height * 0.5f;
-    arrow.addTriangle(arrowX - 3, arrowY - 2, arrowX + 3, arrowY - 2, arrowX, arrowY + 2);
-    g.setColour(box.isEnabled() ? juce::Colour(0xFFE8E4DC) : juce::Colours::grey);
+    arrow.addTriangle(arrowX - 4, arrowY - 3, arrowX + 4, arrowY - 3, arrowX, arrowY + 3);
+    g.setColour(box.isEnabled() ? NeveColors::cream : NeveColors::cream.withAlpha(0.3f));
     g.fillPath(arrow);
 }
 
-// Editor Implementation
+void Neve1073Editor::VintageLookAndFeel::drawButtonBackground(
+    juce::Graphics& g, juce::Button& button,
+    const juce::Colour& backgroundColour,
+    bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown)
+{
+    auto bounds = button.getLocalBounds().toFloat();
+
+    // Button gradient
+    auto baseColour = shouldDrawButtonAsDown ? backgroundColour.darker(0.2f) : backgroundColour;
+    juce::ColourGradient bgGradient(
+        baseColour.brighter(0.1f), 0, bounds.getY(),
+        baseColour.darker(0.1f), 0, bounds.getBottom(), false);
+    g.setGradientFill(bgGradient);
+    g.fillRoundedRectangle(bounds, 3.0f);
+
+    // Highlight on hover
+    if (shouldDrawButtonAsHighlighted && !shouldDrawButtonAsDown)
+    {
+        g.setColour(juce::Colours::white.withAlpha(0.1f));
+        g.fillRoundedRectangle(bounds, 3.0f);
+    }
+
+    // Top highlight
+    g.setColour(baseColour.brighter(0.3f).withAlpha(0.4f));
+    g.drawHorizontalLine((int)bounds.getY() + 1, bounds.getX() + 2, bounds.getRight() - 2);
+
+    // Border
+    g.setColour(baseColour.darker(0.3f));
+    g.drawRoundedRectangle(bounds.reduced(0.5f), 3.0f, 1.0f);
+}
+
+void Neve1073Editor::VintageLookAndFeel::drawToggleButton(
+    juce::Graphics& g, juce::ToggleButton& button,
+    bool shouldDrawButtonAsHighlighted, bool /*shouldDrawButtonAsDown*/)
+{
+    auto bounds = button.getLocalBounds().toFloat();
+    bool isOn = button.getToggleState();
+
+    // Button background
+    juce::ColourGradient bgGradient(
+        isOn ? NeveColors::neveBlue : NeveColors::panelMid,
+        0, bounds.getY(),
+        isOn ? NeveColors::neveBlueDark : NeveColors::panelDark,
+        0, bounds.getBottom(), false);
+    g.setGradientFill(bgGradient);
+    g.fillRoundedRectangle(bounds, 4.0f);
+
+    // Highlight on hover
+    if (shouldDrawButtonAsHighlighted)
+    {
+        g.setColour(juce::Colours::white.withAlpha(0.1f));
+        g.fillRoundedRectangle(bounds, 4.0f);
+    }
+
+    // Top highlight edge
+    g.setColour((isOn ? NeveColors::neveBlueLight : NeveColors::panelLight).withAlpha(0.4f));
+    g.drawHorizontalLine((int)bounds.getY() + 1, bounds.getX() + 3, bounds.getRight() - 3);
+
+    // Bottom shadow edge
+    g.setColour(juce::Colours::black.withAlpha(0.3f));
+    g.drawHorizontalLine((int)bounds.getBottom() - 2, bounds.getX() + 3, bounds.getRight() - 3);
+
+    // Border
+    g.setColour(isOn ? NeveColors::neveBlueDark : juce::Colours::black.withAlpha(0.5f));
+    g.drawRoundedRectangle(bounds.reduced(0.5f), 4.0f, 1.0f);
+
+    // LED indicator
+    float ledX = bounds.getX() + 8.0f;
+    float ledY = bounds.getCentreY();
+    float ledRadius = 4.0f;
+
+    // LED glow when on
+    if (isOn)
+    {
+        g.setColour(NeveColors::indicatorGreen.withAlpha(0.3f));
+        g.fillEllipse(ledX - ledRadius - 2, ledY - ledRadius - 2, (ledRadius + 2) * 2, (ledRadius + 2) * 2);
+    }
+
+    // LED body
+    g.setColour(isOn ? NeveColors::indicatorGreen : NeveColors::indicatorRed.darker(0.5f));
+    g.fillEllipse(ledX - ledRadius, ledY - ledRadius, ledRadius * 2, ledRadius * 2);
+
+    // LED highlight
+    g.setColour(juce::Colours::white.withAlpha(0.3f));
+    g.fillEllipse(ledX - ledRadius + 1, ledY - ledRadius + 1, ledRadius, ledRadius);
+
+    // Text
+    g.setColour(NeveColors::cream);
+    g.setFont(juce::Font(11.0f, juce::Font::bold));
+    auto textBounds = bounds.withTrimmedLeft(20.0f);
+    g.drawText(button.getButtonText(), textBounds, juce::Justification::centred);
+}
+
+// Editor implementation
 Neve1073Editor::Neve1073Editor(Neve1073Processor& p)
     : AudioProcessorEditor(&p)
     , processorRef(p)
+    , inputMeter(p, true)
+    , outputMeter(p, false)
 {
-    setLookAndFeel(&neveLnF);
+    setLookAndFeel(&vintageLnF);
 
-    // Setup all sliders
-    micGainSlider.setName("MicGain");
-    setupRotarySlider(micGainSlider);
+    // VU Meters
+    addAndMakeVisible(inputMeter);
+    addAndMakeVisible(outputMeter);
 
-    lineGainSlider.setName("LineGain");
-    setupRotarySlider(lineGainSlider);
+    // Setup sliders
+    setupSlider(inputGainSlider, " dB");
+    setupSlider(inputDriveSlider, " dB");
+    setupSlider(preampGainSlider, " dB");
+    setupSlider(preampBiasSlider);
+    setupSlider(lowGainSlider, " dB");
+    setupSlider(midGainSlider, " dB");
+    setupSlider(highGainSlider, " dB");
+    setupSlider(outputGainSlider, " dB");
+    setupSlider(outputDriveSlider, " dB");
+    setupSlider(mixSlider, " %");
 
-    hfGainSlider.setName("HFGain");
-    setupRotarySlider(hfGainSlider);
+    // Setup combo boxes
+    lowFreqCombo.addItemList({"35 Hz", "60 Hz", "110 Hz", "220 Hz"}, 1);
+    setupComboBox(lowFreqCombo);
 
-    midFreqSlider.setName("MidFreq");
-    setupRotarySlider(midFreqSlider, 6);
+    midFreqCombo.addItemList({"360 Hz", "700 Hz", "1.6 kHz", "3.2 kHz", "4.8 kHz", "7.2 kHz"}, 1);
+    setupComboBox(midFreqCombo);
 
-    midGainSlider.setName("MidGain");
-    setupRotarySlider(midGainSlider);
+    hpfFreqCombo.addItemList({"Off", "50 Hz", "80 Hz", "160 Hz", "300 Hz"}, 1);
+    setupComboBox(hpfFreqCombo);
 
-    lfFreqSlider.setName("LFFreq");
-    setupRotarySlider(lfFreqSlider, 4);
-
-    lfGainSlider.setName("LFGain");
-    setupRotarySlider(lfGainSlider);
-
-    hpfFreqSlider.setName("HPFFreq");
-    setupRotarySlider(hpfFreqSlider, 5);
-
-    addAndMakeVisible(eqlButton);
-    addAndMakeVisible(phaseButton);
-
-    mixSlider.setName("Mix");
-    setupRotarySlider(mixSlider);
-
-    oversamplingCombo.addItemList({"1x", "2x", "4x", "8x"}, 1);
-    addAndMakeVisible(oversamplingCombo);
+    oversamplingCombo.addItemList({"1x (Off)", "2x", "4x", "8x"}, 1);
+    setupComboBox(oversamplingCombo);
 
     qualityCombo.addItemList({"Eco", "Normal", "High"}, 1);
-    addAndMakeVisible(qualityCombo);
+    setupComboBox(qualityCombo);
 
+    // Title - Classic Neve branding
+    titleLabel.setText("NEVE 1073", juce::dontSendNotification);
+    titleLabel.setFont(juce::Font(28.0f, juce::Font::bold));
+    titleLabel.setColour(juce::Label::textColourId, NeveColors::cream);
+    titleLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(titleLabel);
+
+    // Section labels with cream color on dark background
+    setupLabel(inputLabel);
+    setupLabel(preampLabel);
+    setupLabel(lowLabel);
+    setupLabel(midLabel);
+    setupLabel(highLabel);
+    setupLabel(hpfLabel);
+    setupLabel(outputLabel);
+    setupLabel(mixLabel);
+
+    // EQ enable button with vintage styling
+    eqEnabledButton.setColour(juce::ToggleButton::textColourId, NeveColors::cream);
+    eqEnabledButton.setColour(juce::ToggleButton::tickColourId, NeveColors::neveBlue);
+    eqEnabledButton.setColour(juce::ToggleButton::tickDisabledColourId, NeveColors::panelLight);
+    addAndMakeVisible(eqEnabledButton);
+
+    // Create parameter attachments
+    auto& params = processorRef.getParameters();
+
+    inputGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        params, Neve1073Processor::PARAM_INPUT_GAIN, inputGainSlider);
+    inputDriveAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        params, Neve1073Processor::PARAM_INPUT_DRIVE, inputDriveSlider);
+
+    preampGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        params, Neve1073Processor::PARAM_PREAMP_GAIN, preampGainSlider);
+    preampBiasAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        params, Neve1073Processor::PARAM_PREAMP_BIAS, preampBiasSlider);
+
+    lowFreqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+        params, Neve1073Processor::PARAM_LOW_FREQ, lowFreqCombo);
+    lowGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        params, Neve1073Processor::PARAM_LOW_GAIN, lowGainSlider);
+
+    midFreqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+        params, Neve1073Processor::PARAM_MID_FREQ, midFreqCombo);
+    midGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        params, Neve1073Processor::PARAM_MID_GAIN, midGainSlider);
+
+    highGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        params, Neve1073Processor::PARAM_HIGH_GAIN, highGainSlider);
+
+    hpfFreqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+        params, Neve1073Processor::PARAM_HPF_FREQ, hpfFreqCombo);
+
+    outputGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        params, Neve1073Processor::PARAM_OUTPUT_GAIN, outputGainSlider);
+    outputDriveAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        params, Neve1073Processor::PARAM_OUTPUT_DRIVE, outputDriveSlider);
+
+    eqEnabledAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        params, Neve1073Processor::PARAM_EQ_ENABLED, eqEnabledButton);
+
+    mixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        params, Neve1073Processor::PARAM_MIX, mixSlider);
+
+    oversamplingAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+        params, Neve1073Processor::PARAM_OVERSAMPLING, oversamplingCombo);
+
+    qualityAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+        params, Neve1073Processor::PARAM_QUALITY, qualityCombo);
+
+    // Preset controls
+    presetCombo.setColour(juce::ComboBox::textColourId, NeveColors::cream);
+    presetCombo.setColour(juce::ComboBox::backgroundColourId, NeveColors::panelMid);
+    presetCombo.setColour(juce::ComboBox::outlineColourId, NeveColors::panelLight);
     presetCombo.onChange = [this] { onPresetSelected(); };
     addAndMakeVisible(presetCombo);
     updatePresetList();
 
-    // Parameter attachments
-    auto& params = processorRef.getParameters();
+    // Save button
+    savePresetButton.setColour(juce::TextButton::buttonColourId, NeveColors::neveBlue);
+    savePresetButton.setColour(juce::TextButton::textColourOffId, NeveColors::cream);
+    savePresetButton.onClick = [this] { onSavePreset(); };
+    addAndMakeVisible(savePresetButton);
 
-    inputGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        params, Neve1073Processor::PARAM_INPUT_GAIN, micGainSlider);
-    outputGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        params, Neve1073Processor::PARAM_OUTPUT_GAIN, lineGainSlider);
-    highGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        params, Neve1073Processor::PARAM_HIGH_GAIN, hfGainSlider);
-    midFreqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        params, Neve1073Processor::PARAM_MID_FREQ, midFreqSlider);
-    midGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        params, Neve1073Processor::PARAM_MID_GAIN, midGainSlider);
-    lowFreqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        params, Neve1073Processor::PARAM_LOW_FREQ, lfFreqSlider);
-    lowGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        params, Neve1073Processor::PARAM_LOW_GAIN, lfGainSlider);
-    hpfFreqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        params, Neve1073Processor::PARAM_HPF_FREQ, hpfFreqSlider);
-    eqEnabledAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        params, Neve1073Processor::PARAM_EQ_ENABLED, eqlButton);
-    mixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        params, Neve1073Processor::PARAM_MIX, mixSlider);
-    oversamplingAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
-        params, Neve1073Processor::PARAM_OVERSAMPLING, oversamplingCombo);
-    qualityAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
-        params, Neve1073Processor::PARAM_QUALITY, qualityCombo);
+    // Delete button
+    deletePresetButton.setColour(juce::TextButton::buttonColourId, NeveColors::panelMid);
+    deletePresetButton.setColour(juce::TextButton::textColourOffId, NeveColors::cream);
+    deletePresetButton.onClick = [this] { onDeletePreset(); };
+    addAndMakeVisible(deletePresetButton);
 
-    setSize(240, 720);
+    setSize(900, 420);
 }
 
 Neve1073Editor::~Neve1073Editor()
@@ -310,218 +392,224 @@ Neve1073Editor::~Neve1073Editor()
     setLookAndFeel(nullptr);
 }
 
-void Neve1073Editor::setupRotarySlider(juce::Slider& slider, int numSteps)
+void Neve1073Editor::setupSlider(juce::Slider& slider, const juce::String& suffix)
 {
     slider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-    slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    if (numSteps > 0)
-        slider.setRange(0, numSteps - 1, 1);
+    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 55, 16);
+    slider.setColour(juce::Slider::textBoxTextColourId, NeveColors::cream);
+    slider.setColour(juce::Slider::textBoxBackgroundColourId, NeveColors::panelDark.withAlpha(0.5f));
+    slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+    slider.setTextValueSuffix(suffix);
     addAndMakeVisible(slider);
+}
+
+void Neve1073Editor::setupComboBox(juce::ComboBox& combo)
+{
+    combo.setColour(juce::ComboBox::textColourId, NeveColors::cream);
+    combo.setColour(juce::ComboBox::backgroundColourId, NeveColors::neveBlue);
+    combo.setColour(juce::ComboBox::outlineColourId, NeveColors::neveBlueDark);
+    addAndMakeVisible(combo);
+}
+
+void Neve1073Editor::setupLabel(juce::Label& label)
+{
+    label.setFont(juce::Font(11.0f, juce::Font::bold));
+    label.setColour(juce::Label::textColourId, NeveColors::cream);
+    label.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(label);
 }
 
 void Neve1073Editor::paint(juce::Graphics& g)
 {
-    // Main background
-    g.fillAll(neveBlue);
+    auto bounds = getLocalBounds();
 
-    // Subtle noise texture
-    juce::Random rng(42);
-    for (int i = 0; i < 800; ++i)
+    // Main background - dark brushed metal
+    g.fillAll(NeveColors::panelDark);
+
+    // Brushed metal texture (horizontal lines)
+    juce::Random rng(12345);
+    for (int y = 0; y < getHeight(); y += 2)
     {
-        float x = rng.nextFloat() * (float)getWidth();
-        float y = rng.nextFloat() * (float)getHeight();
-        g.setColour(juce::Colours::white.withAlpha(rng.nextFloat() * 0.015f));
-        g.fillRect(x, y, 1.0f, 1.0f);
+        float alpha = 0.02f + rng.nextFloat() * 0.03f;
+        g.setColour(juce::Colours::white.withAlpha(alpha));
+        g.drawHorizontalLine(y, 0, (float)getWidth());
     }
 
-    float cx = getWidth() * 0.5f;
-    g.setColour(creamWhite);
+    // Top header panel with Neve blue
+    juce::Rectangle<float> headerBounds(0, 0, (float)getWidth(), 45.0f);
+    juce::ColourGradient headerGradient(
+        NeveColors::neveBlue, 0, 0,
+        NeveColors::neveBlueDark, 0, 45, false);
+    g.setGradientFill(headerGradient);
+    g.fillRect(headerBounds);
 
-    // === INPUT GAIN SECTION ===
-    float inputKnobY = 75.0f;
-    float inputRadius = 58.0f;
+    // Header beveled edges
+    g.setColour(NeveColors::neveBlueLight.withAlpha(0.5f));
+    g.drawHorizontalLine(0, 0, (float)getWidth());
+    g.setColour(juce::Colours::black.withAlpha(0.4f));
+    g.drawHorizontalLine(44, 0, (float)getWidth());
 
-    // "dB" label top-left
-    g.setFont(juce::Font(11.0f, juce::Font::bold));
-    g.drawText("dB", 15, 30, 25, 14, juce::Justification::centred);
+    // Section panels with beveled edges
+    int sectionWidth = (getWidth() - 60) / 8;
+    int xOffset = 30;
+    int panelY = 50;
+    int panelHeight = getHeight() - 100;
 
-    // "LINE" label top-right
-    g.drawText("LINE", getWidth() - 45, 30, 35, 14, juce::Justification::centred);
+    for (int i = 0; i < 8; ++i)
+    {
+        juce::Rectangle<float> sectionBounds(
+            (float)(xOffset + i * sectionWidth + 3),
+            (float)panelY,
+            (float)(sectionWidth - 6),
+            (float)panelHeight);
 
-    // Input gain markings in arc
+        // Section background
+        juce::ColourGradient sectionGradient(
+            NeveColors::panelMid, sectionBounds.getX(), sectionBounds.getY(),
+            NeveColors::panelDark, sectionBounds.getX(), sectionBounds.getBottom(), false);
+        g.setGradientFill(sectionGradient);
+        g.fillRoundedRectangle(sectionBounds, 4.0f);
+
+        // Inset shadow (top-left dark)
+        g.setColour(juce::Colours::black.withAlpha(0.3f));
+        g.drawRoundedRectangle(sectionBounds, 4.0f, 1.0f);
+
+        // Inner highlight (bottom-right light)
+        g.setColour(NeveColors::panelLight.withAlpha(0.2f));
+        g.drawLine(sectionBounds.getX() + 4, sectionBounds.getBottom() - 1,
+                   sectionBounds.getRight() - 4, sectionBounds.getBottom() - 1, 1.0f);
+    }
+
+    // Bottom panel
+    juce::Rectangle<float> bottomBounds(0, (float)(getHeight() - 48), (float)getWidth(), 48.0f);
+    juce::ColourGradient bottomGradient(
+        NeveColors::panelMid, 0, bottomBounds.getY(),
+        NeveColors::panelDark, 0, (float)getHeight(), false);
+    g.setGradientFill(bottomGradient);
+    g.fillRect(bottomBounds);
+
+    // Bottom panel top edge highlight
+    g.setColour(NeveColors::panelLight.withAlpha(0.3f));
+    g.drawHorizontalLine(getHeight() - 48, 0, (float)getWidth());
+
+    // Bottom panel labels
+    g.setColour(NeveColors::cream.withAlpha(0.7f));
+    g.setFont(juce::Font(10.0f, juce::Font::bold));
+    g.drawText("OVERSAMPLING", 10, getHeight() - 43, 100, 14, juce::Justification::centredLeft);
+    g.drawText("QUALITY", 200, getHeight() - 43, 80, 14, juce::Justification::centredLeft);
+    g.drawText("PRESET", getWidth() - 320, getHeight() - 43, 80, 14, juce::Justification::centredLeft);
+
+    // VU Meter labels
+    g.setColour(NeveColors::cream.withAlpha(0.6f));
     g.setFont(juce::Font(9.0f));
-    juce::StringArray inputMarks = {"80", "70", "60", "50", "40", "30", "20", "10", "0", "-10", "-20"};
-    float startAngle = -2.5f;
-    float endAngle = 2.5f;
-    for (int i = 0; i < inputMarks.size(); ++i)
-    {
-        float t = (float)i / (float)(inputMarks.size() - 1);
-        float angle = startAngle + t * (endAngle - startAngle);
-        float tx = cx + std::cos(angle - juce::MathConstants<float>::halfPi) * inputRadius;
-        float ty = inputKnobY + std::sin(angle - juce::MathConstants<float>::halfPi) * inputRadius;
-        g.drawText(inputMarks[i], (int)tx - 15, (int)ty - 6, 30, 12, juce::Justification::centred);
-    }
+    g.drawText("IN", 5, getHeight() - 78, 20, 12, juce::Justification::centred);
+    g.drawText("OUT", getWidth() - 25, getHeight() - 78, 20, 12, juce::Justification::centred);
 
-    // "MIC." label left side
-    g.setFont(juce::Font(10.0f, juce::Font::bold));
-    g.drawText("MIC.", 8, (int)inputKnobY + 30, 35, 14, juce::Justification::centred);
+    // Decorative screws in corners
+    auto drawScrew = [&](float cx, float cy) {
+        float screwRadius = 5.0f;
 
-    // "OFF" label below input knob
-    g.setFont(juce::Font(9.0f));
-    g.drawText("OFF", (int)cx - 15, (int)inputKnobY + 48, 30, 12, juce::Justification::centred);
+        // Screw shadow
+        g.setColour(juce::Colours::black.withAlpha(0.5f));
+        g.fillEllipse(cx - screwRadius + 1, cy - screwRadius + 1, screwRadius * 2, screwRadius * 2);
 
-    // === OUTPUT GAIN SECTION ===
-    float outputKnobY = 175.0f;
-    float outputRadius = 52.0f;
+        // Screw body
+        juce::ColourGradient screwGradient(
+            NeveColors::metalLight, cx - screwRadius, cy - screwRadius,
+            NeveColors::metalDark, cx + screwRadius, cy + screwRadius, false);
+        g.setGradientFill(screwGradient);
+        g.fillEllipse(cx - screwRadius, cy - screwRadius, screwRadius * 2, screwRadius * 2);
 
-    g.drawText("-20", 18, (int)outputKnobY - 8, 28, 12, juce::Justification::centred);
-    g.drawText("+20", getWidth() - 48, (int)outputKnobY - 8, 28, 12, juce::Justification::centred);
-    g.drawText("OFF", (int)cx - 15, (int)outputKnobY + 42, 30, 12, juce::Justification::centred);
-
-    // Divider line
-    g.setColour(creamWhite.withAlpha(0.25f));
-    g.drawHorizontalLine(235, 15, (float)getWidth() - 15);
-
-    // === HF SECTION ===
-    g.setColour(creamWhite);
-    g.setFont(juce::Font(10.0f, juce::Font::bold));
-    g.drawText("HF", (int)cx - 15, 248, 30, 14, juce::Justification::centred);
-    g.setFont(juce::Font(9.0f));
-    g.drawText("12kHz", (int)cx - 22, 262, 44, 12, juce::Justification::centred);
-
-    // HF gain knob markings
-    float hfKnobY = 305.0f;
-    g.setFont(juce::Font(8.0f));
-    g.drawText("+16", 20, (int)hfKnobY - 15, 25, 12, juce::Justification::centred);
-    g.drawText("-16", getWidth() - 48, (int)hfKnobY - 15, 25, 12, juce::Justification::centred);
-    g.drawText("0", (int)cx - 10, (int)hfKnobY + 38, 20, 12, juce::Justification::centred);
-
-    // Divider
-    g.setColour(creamWhite.withAlpha(0.25f));
-    g.drawHorizontalLine(355, 15, (float)getWidth() - 15);
-
-    // === MID SECTION ===
-    g.setColour(creamWhite);
-    g.setFont(juce::Font(10.0f, juce::Font::bold));
-    g.drawText("MID", (int)cx - 18, 365, 36, 14, juce::Justification::centred);
-
-    // Mid frequency selector markings
-    float midKnobY = 420.0f;
-    float midRadius = 52.0f;
-    g.setFont(juce::Font(8.0f));
-    juce::StringArray midFreqs = {"7.2", "4.8", "3.2", "1.6", ".7", ".36"};
-    for (int i = 0; i < midFreqs.size(); ++i)
-    {
-        float t = (float)i / (float)(midFreqs.size() - 1);
-        float angle = startAngle + t * (endAngle - startAngle);
-        float tx = cx + std::cos(angle - juce::MathConstants<float>::halfPi) * midRadius;
-        float ty = midKnobY + std::sin(angle - juce::MathConstants<float>::halfPi) * midRadius;
-        g.drawText(midFreqs[i], (int)tx - 14, (int)ty - 5, 28, 10, juce::Justification::centred);
-    }
-    g.drawText("kHz", (int)cx - 14, (int)midKnobY - 6, 28, 10, juce::Justification::centred);
-
-    // Divider
-    g.setColour(creamWhite.withAlpha(0.25f));
-    g.drawHorizontalLine(475, 15, (float)getWidth() - 15);
-
-    // === LF SECTION ===
-    g.setColour(creamWhite);
-    g.setFont(juce::Font(10.0f, juce::Font::bold));
-    g.drawText("LF", (int)cx - 12, 485, 24, 14, juce::Justification::centred);
-
-    // LF frequency selector markings
-    float lfKnobY = 535.0f;
-    float lfRadius = 50.0f;
-    g.setFont(juce::Font(8.0f));
-    juce::StringArray lfFreqs = {"220", "110", "60", "35"};
-    for (int i = 0; i < lfFreqs.size(); ++i)
-    {
-        float t = (float)i / (float)(lfFreqs.size() - 1);
-        float angle = startAngle + t * (endAngle - startAngle);
-        float tx = cx + std::cos(angle - juce::MathConstants<float>::halfPi) * lfRadius;
-        float ty = lfKnobY + std::sin(angle - juce::MathConstants<float>::halfPi) * lfRadius;
-        g.drawText(lfFreqs[i], (int)tx - 16, (int)ty - 5, 32, 10, juce::Justification::centred);
-    }
-    g.drawText("Hz", (int)cx - 10, (int)lfKnobY - 6, 20, 10, juce::Justification::centred);
-
-    // Divider
-    g.setColour(creamWhite.withAlpha(0.25f));
-    g.drawHorizontalLine(585, 15, (float)getWidth() - 15);
-
-    // === HPF SECTION ===
-    g.setColour(creamWhite);
-    g.setFont(juce::Font(10.0f, juce::Font::bold));
-    g.drawText("HPF", (int)cx - 18, 592, 36, 14, juce::Justification::centred);
-
-    // HPF frequency selector markings
-    float hpfKnobY = 640.0f;
-    float hpfRadius = 48.0f;
-    g.setFont(juce::Font(8.0f));
-    juce::StringArray hpfFreqs = {"OFF", "50", "80", "160", "300"};
-    for (int i = 0; i < hpfFreqs.size(); ++i)
-    {
-        float t = (float)i / (float)(hpfFreqs.size() - 1);
-        float angle = startAngle + t * (endAngle - startAngle);
-        float tx = cx + std::cos(angle - juce::MathConstants<float>::halfPi) * hpfRadius;
-        float ty = hpfKnobY + std::sin(angle - juce::MathConstants<float>::halfPi) * hpfRadius;
-        g.drawText(hpfFreqs[i], (int)tx - 18, (int)ty - 5, 36, 10, juce::Justification::centred);
-    }
-
-    // === BOTTOM PANEL ===
-    g.setColour(neveBlueDark);
-    g.fillRect(0, getHeight() - 35, getWidth(), 35);
-    g.setColour(neveBlueLight.withAlpha(0.3f));
-    g.drawHorizontalLine(getHeight() - 35, 0, (float)getWidth());
-
-    // Corner screws
-    auto drawScrew = [&](float sx, float sy) {
-        g.setColour(juce::Colour(0xFF353535));
-        g.fillEllipse(sx - 6, sy - 6, 12, 12);
-        g.setColour(juce::Colour(0xFF555555));
-        g.drawEllipse(sx - 5, sy - 5, 10, 10, 1.0f);
-        g.setColour(juce::Colour(0xFF252525));
-        g.drawLine(sx - 3.5f, sy, sx + 3.5f, sy, 1.5f);
+        // Screw slot
+        g.setColour(NeveColors::panelDark);
+        g.drawLine(cx - 3, cy, cx + 3, cy, 1.5f);
     };
 
     drawScrew(12, 12);
     drawScrew((float)getWidth() - 12, 12);
+    drawScrew(12, (float)getHeight() - 12);
+    drawScrew((float)getWidth() - 12, (float)getHeight() - 12);
+
+    (void)bounds; // Unused after initial assignment
 }
 
 void Neve1073Editor::resized()
 {
-    int cx = getWidth() / 2;
+    auto bounds = getLocalBounds();
+    int sectionWidth = (bounds.getWidth() - 60) / 8;  // Account for meters
+    int knobSize = 70;
+    int knobY = 75;
+    int comboHeight = 24;
+    int meterWidth = 18;
 
-    // Input gain knob
-    micGainSlider.setBounds(cx - 40, 35, 80, 80);
+    // Title - positioned in header
+    titleLabel.setBounds(0, 10, bounds.getWidth(), 30);
 
-    // Output gain knob
-    lineGainSlider.setBounds(cx - 35, 140, 70, 70);
+    // Input VU meter (left edge)
+    inputMeter.setBounds(6, 55, meterWidth, 260);
 
-    // HF gain knob
-    hfGainSlider.setBounds(cx - 30, 275, 60, 60);
+    // Section labels are positioned in the header panel
+    int labelY = 55;
+    int xOffset = 30;
 
-    // MID section
-    midFreqSlider.setBounds(cx - 35, 385, 70, 70);
-    midGainSlider.setBounds(getWidth() - 55, 400, 45, 45);
+    // Input section
+    int section = 0;
+    inputLabel.setBounds(xOffset + section * sectionWidth, labelY, sectionWidth, 18);
+    inputGainSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 20, knobSize, knobSize + 20);
+    inputDriveSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 115, knobSize, knobSize + 20);
 
-    // LF section
-    lfFreqSlider.setBounds(cx - 35, 500, 70, 70);
-    lfGainSlider.setBounds(getWidth() - 55, 515, 45, 45);
+    // Preamp section
+    section = 1;
+    preampLabel.setBounds(xOffset + section * sectionWidth, labelY, sectionWidth, 18);
+    preampGainSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 20, knobSize, knobSize + 20);
+    preampBiasSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 115, knobSize, knobSize + 20);
 
-    // HPF selector
-    hpfFreqSlider.setBounds(cx - 35, 605, 70, 70);
+    // Low EQ section
+    section = 2;
+    lowLabel.setBounds(xOffset + section * sectionWidth, labelY, sectionWidth, 18);
+    lowFreqCombo.setBounds(xOffset + section * sectionWidth + 10, knobY + 25, sectionWidth - 20, comboHeight);
+    lowGainSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 60, knobSize, knobSize + 20);
 
-    // Buttons
-    eqlButton.setBounds(15, getHeight() - 80, 50, 40);
-    phaseButton.setBounds(70, getHeight() - 80, 60, 40);
+    // Mid EQ section
+    section = 3;
+    midLabel.setBounds(xOffset + section * sectionWidth, labelY, sectionWidth, 18);
+    midFreqCombo.setBounds(xOffset + section * sectionWidth + 10, knobY + 25, sectionWidth - 20, comboHeight);
+    midGainSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 60, knobSize, knobSize + 20);
 
-    // Mix knob
-    mixSlider.setBounds(getWidth() - 55, getHeight() - 80, 45, 45);
+    // High EQ section
+    section = 4;
+    highLabel.setBounds(xOffset + section * sectionWidth, labelY, sectionWidth, 18);
+    highGainSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 20, knobSize, knobSize + 20);
+    eqEnabledButton.setBounds(xOffset + section * sectionWidth + (sectionWidth - 55) / 2, knobY + 120, 55, 28);
 
-    // Bottom controls
-    presetCombo.setBounds(10, getHeight() - 28, 100, 20);
-    oversamplingCombo.setBounds(115, getHeight() - 28, 45, 20);
-    qualityCombo.setBounds(165, getHeight() - 28, 55, 20);
+    // HPF section
+    section = 5;
+    hpfLabel.setBounds(xOffset + section * sectionWidth, labelY, sectionWidth, 18);
+    hpfFreqCombo.setBounds(xOffset + section * sectionWidth + 10, knobY + 55, sectionWidth - 20, comboHeight);
+
+    // Mix section
+    section = 6;
+    mixLabel.setBounds(xOffset + section * sectionWidth, labelY, sectionWidth, 18);
+    mixSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 20, knobSize, knobSize + 20);
+
+    // Output section
+    section = 7;
+    outputLabel.setBounds(xOffset + section * sectionWidth, labelY, sectionWidth, 18);
+    outputGainSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 20, knobSize, knobSize + 20);
+    outputDriveSlider.setBounds(xOffset + section * sectionWidth + (sectionWidth - knobSize) / 2, knobY + 115, knobSize, knobSize + 20);
+
+    // Output VU meter (right edge)
+    outputMeter.setBounds(bounds.getWidth() - 24, 55, meterWidth, 260);
+
+    // Bottom panel controls
+    oversamplingCombo.setBounds(10, getHeight() - 28, 110, 22);
+    qualityCombo.setBounds(200, getHeight() - 28, 90, 22);
+
+    // Preset controls (right side of bottom panel)
+    int presetX = getWidth() - 320;
+    presetCombo.setBounds(presetX, getHeight() - 28, 200, 22);
+    savePresetButton.setBounds(presetX + 205, getHeight() - 28, 50, 22);
+    deletePresetButton.setBounds(presetX + 260, getHeight() - 28, 40, 22);
 }
 
 void Neve1073Editor::updatePresetList()
@@ -529,19 +617,29 @@ void Neve1073Editor::updatePresetList()
     auto& pm = processorRef.getPresetManager();
     presetCombo.clear(juce::dontSendNotification);
 
+    // Add factory presets first
     auto factoryPresets = pm.getFactoryPresetNames();
     int itemId = 1;
-    for (const auto& name : factoryPresets)
-        presetCombo.addItem(name, itemId++);
 
+    presetCombo.addSectionHeading("Factory Presets");
+    for (const auto& name : factoryPresets)
+    {
+        presetCombo.addItem(name, itemId++);
+    }
+
+    // Add user presets if any exist
     auto userPresets = pm.getUserPresetNames();
     if (!userPresets.isEmpty())
     {
         presetCombo.addSeparator();
+        presetCombo.addSectionHeading("User Presets");
         for (const auto& name : userPresets)
+        {
             presetCombo.addItem(name, itemId++);
+        }
     }
 
+    // Select current preset
     auto currentPreset = pm.getCurrentPresetName();
     for (int i = 0; i < presetCombo.getNumItems(); ++i)
     {
@@ -557,7 +655,86 @@ void Neve1073Editor::onPresetSelected()
 {
     auto selectedName = presetCombo.getText();
     if (selectedName.isNotEmpty())
+    {
         processorRef.getPresetManager().loadPreset(selectedName);
+    }
+}
+
+void Neve1073Editor::onSavePreset()
+{
+    auto& pm = processorRef.getPresetManager();
+
+    // Create alert window for preset name
+    auto* alertWindow = new juce::AlertWindow(
+        "Save Preset",
+        "Enter a name for your preset:",
+        juce::MessageBoxIconType::QuestionIcon);
+
+    alertWindow->addTextEditor("presetName", pm.getCurrentPresetName(), "Preset Name:");
+    alertWindow->addButton("Save", 1);
+    alertWindow->addButton("Cancel", 0);
+
+    alertWindow->enterModalState(true, juce::ModalCallbackFunction::create(
+        [this, alertWindow](int result)
+        {
+            if (result == 1)
+            {
+                auto name = alertWindow->getTextEditorContents("presetName");
+                if (name.isNotEmpty())
+                {
+                    // Check if it's a factory preset name
+                    auto factoryNames = processorRef.getPresetManager().getFactoryPresetNames();
+                    if (factoryNames.contains(name))
+                    {
+                        juce::AlertWindow::showMessageBoxAsync(
+                            juce::MessageBoxIconType::WarningIcon,
+                            "Cannot Overwrite",
+                            "Cannot overwrite factory presets. Please choose a different name.");
+                    }
+                    else
+                    {
+                        processorRef.getPresetManager().saveUserPreset(name);
+                        updatePresetList();
+                    }
+                }
+            }
+            delete alertWindow;
+        }), true);
+}
+
+void Neve1073Editor::onDeletePreset()
+{
+    auto& pm = processorRef.getPresetManager();
+    auto currentPreset = presetCombo.getText();
+
+    // Check if it's a user preset (not factory)
+    auto info = pm.getPresetInfo(currentPreset);
+    if (info.isFactory)
+    {
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::WarningIcon,
+            "Cannot Delete",
+            "Factory presets cannot be deleted.");
+        return;
+    }
+
+    // Confirm deletion
+    juce::AlertWindow::showOkCancelBox(
+        juce::MessageBoxIconType::QuestionIcon,
+        "Delete Preset",
+        "Are you sure you want to delete \"" + currentPreset + "\"?",
+        "Delete", "Cancel",
+        this,
+        juce::ModalCallbackFunction::create(
+            [this, currentPreset](int result)
+            {
+                if (result == 1)
+                {
+                    processorRef.getPresetManager().deleteUserPreset(currentPreset);
+                    processorRef.getPresetManager().loadPreset("Init");
+                    updatePresetList();
+                }
+            }));
 }
 
 } // namespace Neve1073
