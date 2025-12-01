@@ -64,9 +64,11 @@ private:
     float lfState = 0.0f;
     float prevInput = 0.0f;
     float prevOutput = 0.0f;
+    float dcBlockState = 0.0f;
 
-    // Lowpass for LF extraction
+    // Filter coefficients
     float lpCoeff = 0.001f;
+    float dcBlockCoeff = 0.001f;
 
     // ADAA processor for alias-free saturation
     ADAA adaa;

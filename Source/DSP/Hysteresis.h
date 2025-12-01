@@ -24,77 +24,77 @@ public:
     {
         fs = sampleRate;
         T = 1.0 / fs;
+        // DC blocking filter coefficient (~5Hz cutoff)
+        dcBlockCoeff = 1.0 - std::exp(-2.0 * 3.14159265359 * 5.0 / fs);
         reset();
     }
 
     void reset()
     {
         M = 0.0;
-        H = 0.0;
         H_prev = 0.0;
         M_prev = 0.0;
+        dcBlockState = 0.0;
     }
 
-    // Hysteresis parameters
     void setDrive(float drive)
     {
-        // Scale saturation point
-        Ms = 1.0 + drive * 0.5;  // Saturation magnetization
+        Ms = 1.0 + drive * 0.3;
     }
 
     void setSaturation(float sat)
     {
-        // 0-1 range
-        a = 20.0 + (1.0 - sat) * 80.0;  // Shape parameter (lower = more saturation)
+        a = 25.0 + (1.0 - sat) * 50.0;
     }
 
     void setWidth(float width)
     {
-        // Hysteresis loop width (coercivity)
-        k = 0.5 + width * 2.0;
+        k = 0.3 + width * 1.5;
     }
 
     void setBias(float bias)
     {
-        // DC bias affects even harmonics
-        dcBias = bias * 0.1;
+        dcBias = bias * 0.05;  // Reduced bias effect
     }
 
     float process(float input)
     {
-        // Apply DC bias for even harmonic generation
-        double H_input = static_cast<double>(input) + dcBias;
+        // Gate very small signals to prevent noise/drift
+        if (std::abs(input) < 1e-6f)
+        {
+            // Decay state toward zero
+            M *= 0.9999;
+            M_prev = M;
+            H_prev = 0.0;
+            return 0.0f;
+        }
 
-        // Calculate dH/dt (rate of change of input)
-        double dH = (H_input - H_prev) / T;
+        double H_input = static_cast<double>(input);
+
+        // Calculate dH/dt
+        double dH = H_input - H_prev;
 
         // Langevin function for anhysteretic magnetization
-        double He = H_input + alpha * M;  // Effective field
+        double He = H_input + alpha * M + dcBias;  // Apply bias here
         double Man = langevin(He);
 
         // Calculate dM/dt using simplified J-A equation
-        double dM_dH;
-        if (std::abs(dH) < 1e-8)
-        {
-            dM_dH = 0.0;
-        }
-        else
+        double dM_dH = 0.0;
+        if (std::abs(dH) > 1e-10)
         {
             double delta = (dH >= 0) ? 1.0 : -1.0;
             double denom = k * delta - alpha * (Man - M);
 
-            if (std::abs(denom) < 1e-8)
-            {
-                dM_dH = 0.0;
-            }
-            else
+            if (std::abs(denom) > 1e-10)
             {
                 dM_dH = (Man - M) / denom;
+                // Clamp to prevent instability
+                dM_dH = std::clamp(dM_dH, -10.0, 10.0);
             }
         }
 
-        // Integrate using trapezoidal rule
-        double dM = dM_dH * (H_input - H_prev);
+        // Integrate
+        double dM = dM_dH * dH;
         M = M_prev + dM;
 
         // Clamp to saturation
@@ -104,8 +104,12 @@ public:
         H_prev = H_input;
         M_prev = M;
 
-        // Output is magnetization (normalized)
-        return static_cast<float>(M / Ms);
+        // DC blocking on output
+        double output = M / Ms;
+        dcBlockState += dcBlockCoeff * (output - dcBlockState);
+        output = output - dcBlockState;
+
+        return static_cast<float>(output);
     }
 
 private:
@@ -113,30 +117,31 @@ private:
     double T = 1.0 / 44100.0;
 
     // Jiles-Atherton parameters
-    double Ms = 1.0;      // Saturation magnetization
-    double a = 50.0;      // Shape parameter
-    double k = 1.0;       // Coercivity (loop width)
-    double alpha = 0.01;  // Inter-domain coupling
-    double c = 0.5;       // Reversibility
-
+    double Ms = 1.0;
+    double a = 40.0;
+    double k = 0.5;
+    double alpha = 0.001;  // Reduced coupling
     double dcBias = 0.0;
 
     // State
-    double M = 0.0;       // Magnetization
-    double H = 0.0;       // Field
+    double M = 0.0;
     double H_prev = 0.0;
     double M_prev = 0.0;
 
-    // Langevin function: L(x) = coth(x) - 1/x
+    // DC blocking
+    double dcBlockCoeff = 0.001;
+    double dcBlockState = 0.0;
+
     double langevin(double x) const
     {
         double xNorm = x / a;
-        if (std::abs(xNorm) < 0.001)
+        if (std::abs(xNorm) < 0.0001)
         {
-            // Taylor series for small x
             return Ms * xNorm / 3.0;
         }
-        return Ms * (1.0 / std::tanh(xNorm) - 1.0 / xNorm);
+        // coth(x) - 1/x, with protection against division by zero
+        double cothX = 1.0 / std::tanh(xNorm);
+        return Ms * (cothX - 1.0 / xNorm);
     }
 };
 

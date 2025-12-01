@@ -7,16 +7,15 @@ namespace Neve1073
 TransformerSaturation::TransformerSaturation(Type type)
     : transformerType(type)
 {
-    // Set type-specific defaults
     if (type == Type::Input)
     {
-        dcOffset = 0.05f;   // More asymmetry
-        lfSatAmount = 0.7f; // More LF saturation
+        dcOffset = 0.03f;   // Subtle asymmetry
+        lfSatAmount = 0.5f;
     }
-    else // Output
+    else
     {
-        dcOffset = 0.02f;   // Less asymmetry (gapped core)
-        lfSatAmount = 0.4f; // Less LF saturation
+        dcOffset = 0.015f;
+        lfSatAmount = 0.3f;
     }
 }
 
@@ -27,7 +26,9 @@ void TransformerSaturation::prepare(double sr, int /*samplesPerBlock*/)
     // LF extraction filter coefficient (~30Hz cutoff)
     lpCoeff = static_cast<float>(1.0 - std::exp(-2.0 * juce::MathConstants<double>::pi * 30.0 / sampleRate));
 
-    // Prepare hysteresis
+    // DC blocking filter (~5Hz)
+    dcBlockCoeff = static_cast<float>(1.0 - std::exp(-2.0 * juce::MathConstants<double>::pi * 5.0 / sampleRate));
+
     hysteresis.prepare(sr);
 
     reset();
@@ -38,6 +39,7 @@ void TransformerSaturation::reset()
     lfState = 0.0f;
     prevInput = 0.0f;
     prevOutput = 0.0f;
+    dcBlockState = 0.0f;
     adaa.reset();
     hysteresis.reset();
 }
@@ -45,15 +47,13 @@ void TransformerSaturation::reset()
 void TransformerSaturation::setDrive(float driveDb)
 {
     drive = std::pow(10.0f, driveDb / 20.0f);
-
-    // Update hysteresis parameters based on drive
-    hysteresis.setDrive(driveDb / 12.0f);  // Normalize to 0-1 range
+    hysteresis.setDrive(driveDb / 12.0f);
     hysteresis.setSaturation(std::min(1.0f, driveDb / 12.0f));
 }
 
 void TransformerSaturation::setDCOffset(float offset)
 {
-    dcOffset = juce::jlimit(0.0f, 0.2f, offset);
+    dcOffset = juce::jlimit(0.0f, 0.1f, offset);
     hysteresis.setBias(offset);
 }
 
@@ -69,15 +69,13 @@ void TransformerSaturation::setQuality(Quality q)
 
 float TransformerSaturation::rationalTanh(float x) const
 {
-    // Padé approximation of tanh - fast and accurate
-    // tanh(x) ≈ x(27 + x²) / (27 + 9x²)
+    // Padé approximation of tanh
     float x2 = x * x;
     return x * (27.0f + x2) / (27.0f + 9.0f * x2);
 }
 
 float TransformerSaturation::softClip(float x, float threshold) const
 {
-    // Soft clipping with smooth knee
     if (std::abs(x) < threshold)
         return x;
 
@@ -85,72 +83,77 @@ float TransformerSaturation::softClip(float x, float threshold) const
     float absX = std::abs(x);
     float knee = threshold * 0.5f;
 
-    // Smooth transition region
     if (absX < threshold + knee)
     {
         float t = (absX - threshold) / knee;
         return sign * (threshold + knee * t * (2.0f - t) * 0.5f);
     }
 
-    // Hard limit
     return sign * (threshold + knee * 0.5f + (1.0f - std::exp(-(absX - threshold - knee))) * 0.3f);
 }
 
 float TransformerSaturation::asymmetricSaturate(float x, float offset, float drv) const
 {
-    // Apply DC offset for even-order harmonic generation
     float biased = x + offset;
-
-    // Apply saturation
     float saturated = rationalTanh(biased * drv);
-
-    // Remove DC offset from output
     return saturated - rationalTanh(offset * drv);
 }
 
 float TransformerSaturation::processSample(float input)
 {
-    // Extract low frequency content (transformer core integration)
+    // Gate silence to prevent DC drift
+    if (std::abs(input) < 1e-8f && std::abs(prevInput) < 1e-8f)
+    {
+        lfState *= 0.999f;
+        prevInput = 0.0f;
+        prevOutput *= 0.999f;
+        dcBlockState *= 0.999f;
+        return 0.0f;
+    }
+
+    // Extract low frequency content
     lfState += lpCoeff * (input - lfState);
 
-    // Calculate frequency-dependent drive
-    // Low frequencies drive the core harder due to longer integration time
+    // Frequency-dependent drive
     float lfEnergy = std::abs(lfState);
-    float dynamicDrive = drive * (1.0f + lfEnergy * lfSatAmount * 3.0f);
+    float dynamicDrive = drive * (1.0f + lfEnergy * lfSatAmount * 2.0f);
 
     float output;
 
     switch (quality)
     {
         case Quality::Low:
-            // Basic saturation (fastest)
             output = asymmetricSaturate(input, dcOffset, dynamicDrive);
             break;
 
         case Quality::Medium:
-            // ADAA for cleaner harmonics
-            output = adaa.processAsymmetricSoftClip(input * dynamicDrive, dcOffset);
+            {
+                float scaled = input * dynamicDrive;
+                output = adaa.processFirstOrderTanh(scaled + dcOffset) - std::tanh(dcOffset);
+            }
             break;
 
         case Quality::High:
-            // Full hysteresis modeling (most accurate)
             {
-                float preHyst = input * dynamicDrive;
-                float hystOut = hysteresis.process(preHyst);
-                // Blend hysteresis with ADAA
-                float adaaOut = adaa.processFirstOrderTanh(preHyst);
-                output = hystOut * 0.6f + adaaOut * 0.4f;
+                float scaled = input * dynamicDrive;
+                float hystOut = hysteresis.process(scaled);
+                float adaaOut = adaa.processFirstOrderTanh(scaled);
+                output = hystOut * 0.5f + adaaOut * 0.5f;
             }
             break;
     }
 
-    // Soft limiting based on transformer type
-    float threshold = (transformerType == Type::Input) ? 0.9f : 0.95f;
+    // Soft limiting
+    float threshold = (transformerType == Type::Input) ? 0.92f : 0.96f;
     output = softClip(output, threshold);
 
-    // Subtle inductive effect (high frequency roll-off simulation)
-    float inductance = 0.02f * ((transformerType == Type::Input) ? 0.5f : 0.3f);
-    output += inductance * (input - prevInput) * (1.0f + std::abs(prevOutput));
+    // Subtle inductive effect
+    float inductance = 0.01f * ((transformerType == Type::Input) ? 0.4f : 0.2f);
+    output += inductance * (input - prevInput);
+
+    // DC blocking filter
+    dcBlockState += dcBlockCoeff * (output - dcBlockState);
+    output = output - dcBlockState;
 
     prevInput = input;
     prevOutput = output;

@@ -21,31 +21,34 @@ public:
 
     void reset()
     {
-        x1 = 0.0f;
-        x2 = 0.0f;
-        ad1_x1 = 0.0f;
-        ad2_x1 = 0.0f;
-        ad2_x2 = 0.0f;
+        tanh_x1 = 0.0f;
+        tanh_ad1_x1 = 0.0f;
+        tanh_x2 = 0.0f;
+        tanh_ad2_x1 = 0.0f;
+        tanh_ad2_x2 = 0.0f;
+        sc_x1 = 0.0f;
+        sc_ad1_x1 = 0.0f;
     }
 
     // First-order ADAA tanh
     float processFirstOrderTanh(float x)
     {
         float result;
-        float diff = x - x1;
+        float diff = x - tanh_x1;
 
         if (std::abs(diff) < tolerance)
         {
-            // Use midpoint evaluation to avoid division by zero
-            result = tanhDerivative((x + x1) * 0.5f);
+            // Use direct function evaluation at midpoint
+            result = tanhFunc((x + tanh_x1) * 0.5f);
         }
         else
         {
-            result = (tanhAD1(x) - ad1_x1) / diff;
+            float ad1_x = tanhAD1(x);
+            result = (ad1_x - tanh_ad1_x1) / diff;
+            tanh_ad1_x1 = ad1_x;
         }
 
-        x1 = x;
-        ad1_x1 = tanhAD1(x);
+        tanh_x1 = x;
 
         return result;
     }
@@ -54,13 +57,12 @@ public:
     float processSecondOrderTanh(float x)
     {
         float result;
-        float d1 = calcD1Tanh(x, x1);
-        float d2 = calcD1Tanh(x1, x2);
+        float d1 = calcD1Tanh(x, tanh_x1);
+        float d2 = calcD1Tanh(tanh_x1, tanh_x2);
 
-        float diff = x - x2;
+        float diff = x - tanh_x2;
         if (std::abs(diff) < tolerance)
         {
-            // Fallback to first-order
             result = d1;
         }
         else
@@ -68,31 +70,32 @@ public:
             result = 2.0f * (d1 - d2) / diff;
         }
 
-        x2 = x1;
-        x1 = x;
-        ad2_x2 = ad2_x1;
-        ad2_x1 = tanhAD2(x);
+        tanh_x2 = tanh_x1;
+        tanh_x1 = x;
+        tanh_ad2_x2 = tanh_ad2_x1;
+        tanh_ad2_x1 = tanhAD2(x);
 
         return result;
     }
 
-    // First-order ADAA soft clip
+    // First-order ADAA soft clip (separate state from tanh)
     float processFirstOrderSoftClip(float x)
     {
         float result;
-        float diff = x - x1;
+        float diff = x - sc_x1;
 
         if (std::abs(diff) < tolerance)
         {
-            result = softClipDerivative((x + x1) * 0.5f);
+            result = softClip((x + sc_x1) * 0.5f);
         }
         else
         {
-            result = (softClipAD1(x) - ad1_x1) / diff;
+            float ad1_x = softClipAD1(x);
+            result = (ad1_x - sc_ad1_x1) / diff;
+            sc_ad1_x1 = ad1_x;
         }
 
-        x1 = x;
-        ad1_x1 = softClipAD1(x);
+        sc_x1 = x;
 
         return result;
     }
@@ -102,19 +105,23 @@ public:
     {
         float biased = x + dcOffset;
         float result = processFirstOrderSoftClip(biased);
-        return result - softClip(dcOffset);  // Remove DC
+        return result - softClip(dcOffset);
     }
 
 private:
-    float x1 = 0.0f;
-    float x2 = 0.0f;
-    float ad1_x1 = 0.0f;
-    float ad2_x1 = 0.0f;
-    float ad2_x2 = 0.0f;
+    // Separate state for tanh processing
+    float tanh_x1 = 0.0f;
+    float tanh_ad1_x1 = 0.0f;
+    float tanh_x2 = 0.0f;
+    float tanh_ad2_x1 = 0.0f;
+    float tanh_ad2_x2 = 0.0f;
+
+    // Separate state for soft clip processing
+    float sc_x1 = 0.0f;
+    float sc_ad1_x1 = 0.0f;
 
     static constexpr float tolerance = 1e-5f;
 
-    // tanh and its antiderivatives
     static float tanhFunc(float x)
     {
         return std::tanh(x);
@@ -129,8 +136,6 @@ private:
     // First antiderivative of tanh: ln(cosh(x))
     static float tanhAD1(float x)
     {
-        // log(cosh(x)) = log((e^x + e^-x)/2) = x - log(2) + log(1 + e^-2x) for x > 0
-        // Use numerically stable form
         float absX = std::abs(x);
         if (absX > 10.0f)
             return absX - 0.693147f;  // ln(2)
@@ -140,27 +145,25 @@ private:
     // Second antiderivative of tanh
     static float tanhAD2(float x)
     {
-        // Integral of ln(cosh(x)) - approximation
         float absX = std::abs(x);
         if (absX < 0.001f)
             return x * x * 0.5f;
         return x * tanhAD1(x) - 0.5f * x * x + dilog(1.0f + std::exp(-2.0f * absX));
     }
 
-    // Simplified dilogarithm approximation
     static float dilog(float x)
     {
         if (x <= 0.0f) return 0.0f;
-        if (x >= 2.0f) return 1.6449f;  // pi^2/6
-        return x * (1.0f - x * 0.25f);  // Simple approximation
+        if (x >= 2.0f) return 1.6449f;
+        return x * (1.0f - x * 0.25f);
     }
 
-    float calcD1Tanh(float x0, float x1_)
+    float calcD1Tanh(float x0, float x1_val)
     {
-        float diff = x0 - x1_;
+        float diff = x0 - x1_val;
         if (std::abs(diff) < tolerance)
-            return tanhFunc((x0 + x1_) * 0.5f);
-        return (tanhAD1(x0) - tanhAD1(x1_)) / diff;
+            return tanhFunc((x0 + x1_val) * 0.5f);
+        return (tanhAD1(x0) - tanhAD1(x1_val)) / diff;
     }
 
     // Soft clip: x / (1 + |x|)
@@ -175,7 +178,6 @@ private:
         return 1.0f / (denom * denom);
     }
 
-    // First antiderivative of soft clip: sign(x) * (|x| - ln(1 + |x|))
     static float softClipAD1(float x)
     {
         float absX = std::abs(x);
