@@ -24,6 +24,13 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(JUCE)
 
 # Plugin settings
+# For cross-compilation, only build Standalone to avoid VST3 helper issues
+if(CMAKE_CROSSCOMPILING)
+    set(PLUGIN_FORMATS Standalone)
+else()
+    set(PLUGIN_FORMATS VST3 Standalone)
+endif()
+
 juce_add_plugin(Neve1073
     COMPANY_NAME "Neve1073"
     IS_SYNTH FALSE
@@ -34,9 +41,14 @@ juce_add_plugin(Neve1073
     COPY_PLUGIN_AFTER_BUILD FALSE
     PLUGIN_MANUFACTURER_CODE Nv73
     PLUGIN_CODE Nv73
-    FORMATS VST3 Standalone
+    FORMATS ${PLUGIN_FORMATS}
     PRODUCT_NAME "Neve 1073 Channel Strip"
 )
+
+# Exclude VST3 helper from build when cross-compiling (it requires native Windows.h)
+if(CMAKE_CROSSCOMPILING AND TARGET juce_vst3_helper)
+    set_target_properties(juce_vst3_helper PROPERTIES EXCLUDE_FROM_ALL TRUE)
+endif()
 
 # Source files
 target_sources(Neve1073
