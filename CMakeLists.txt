@@ -8,6 +8,13 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Fetch JUCE
 include(FetchContent)
+
+# Disable JUCE extras for cross-compilation (VST3 helper causes issues)
+if(CMAKE_CROSSCOMPILING)
+    set(JUCE_BUILD_EXTRAS OFF CACHE BOOL "Don't build JUCE extras" FORCE)
+    set(JUCE_BUILD_EXAMPLES OFF CACHE BOOL "Don't build JUCE examples" FORCE)
+endif()
+
 FetchContent_Declare(
     JUCE
     GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
@@ -77,10 +84,21 @@ if(APPLE)
     )
 endif()
 
-if(UNIX AND NOT APPLE)
+if(UNIX AND NOT APPLE AND NOT CMAKE_CROSSCOMPILING)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(ALSA IMPORTED_TARGET alsa)
     if(ALSA_FOUND)
         target_link_libraries(Neve1073 PRIVATE PkgConfig::ALSA)
+    endif()
+endif()
+
+# Windows-specific settings
+if(WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    target_compile_definitions(Neve1073 PRIVATE
+        _WIN32_WINNT=0x0601
+        WINVER=0x0601
+    )
+    if(MINGW)
+        target_link_options(Neve1073 PRIVATE -static-libgcc -static-libstdc++)
     endif()
 endif()
