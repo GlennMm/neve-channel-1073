@@ -64,6 +64,5 @@ CMD ["sh", "-c", "cd /build && \
     -DCMAKE_CXX_FLAGS='-static-libgcc -static-libstdc++' && \
     make -j$(nproc) && \
     mkdir -p /output && \
-    cp -r Neve1073_artefacts/Release/VST3/* /output/ 2>/dev/null || true && \
     cp -r Neve1073_artefacts/Release/Standalone/* /output/ 2>/dev/null || true && \
-    echo 'Build complete! Output in /output'"]
+    echo 'Build complete! Standalone exe in /output (VST3 requires native Windows build)'"]
