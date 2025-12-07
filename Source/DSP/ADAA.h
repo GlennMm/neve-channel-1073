@@ -35,6 +35,7 @@ public:
     {
         float result;
         float diff = x - tanh_x1;
+        float ad1_x = tanhAD1(x);  // Always compute current antiderivative
 
         if (std::abs(diff) < tolerance)
         {
@@ -43,11 +44,11 @@ public:
         }
         else
         {
-            float ad1_x = tanhAD1(x);
             result = (ad1_x - tanh_ad1_x1) / diff;
-            tanh_ad1_x1 = ad1_x;
         }
 
+        // Always update state to prevent stale values causing pops
+        tanh_ad1_x1 = ad1_x;
         tanh_x1 = x;
 
         return result;
@@ -83,6 +84,7 @@ public:
     {
         float result;
         float diff = x - sc_x1;
+        float ad1_x = softClipAD1(x);  // Always compute current antiderivative
 
         if (std::abs(diff) < tolerance)
         {
@@ -90,11 +92,11 @@ public:
         }
         else
         {
-            float ad1_x = softClipAD1(x);
             result = (ad1_x - sc_ad1_x1) / diff;
-            sc_ad1_x1 = ad1_x;
         }
 
+        // Always update state to prevent stale values causing pops
+        sc_ad1_x1 = ad1_x;
         sc_x1 = x;
 
         return result;
