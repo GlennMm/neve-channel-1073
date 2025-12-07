@@ -92,29 +92,39 @@ float PreampStage::transistorSaturate(float x) const
 
 float PreampStage::processSample(float input)
 {
-    // Envelope follower for smooth gating on silence
+    // Envelope follower for smooth crossfade
     float absInput = std::abs(input);
-    float envCoeff = (absInput > envelope) ? 0.01f : 0.0001f;
-    envelope += envCoeff * (absInput - envelope);
-
-    // If signal is very quiet, pass through with minimal processing
-    if (envelope < noiseThreshold)
-    {
-        prevSample = input;
-        return input * gain;  // Still apply gain but skip nonlinear processing
-    }
+    if (absInput > envelope)
+        envelope += envelopeAttack * (absInput - envelope);
+    else
+        envelope += envelopeRelease * (absInput - envelope);
 
     // Input coupling capacitor (blocks DC, 6.8-22µF tantalum)
-    // High-pass at ~7Hz
+    // High-pass at ~7Hz - always update to prevent drift
     float hpCoeff = static_cast<float>(1.0 - std::exp(-2.0 * juce::MathConstants<double>::pi * 7.0 / sampleRate));
     capacitorState += hpCoeff * (input - capacitorState);
     float acCoupled = input - capacitorState;
 
-    // Apply gain
-    float amplified = acCoupled * gain;
+    // Calculate crossfade mix (smooth transition between clean and saturated)
+    float mix = 0.0f;
+    if (envelope > noiseThreshold + crossfadeRange)
+        mix = 1.0f;
+    else if (envelope > noiseThreshold)
+        mix = (envelope - noiseThreshold) / crossfadeRange;
 
+    // Clean path (just gain, no saturation)
+    float clean = acCoupled * gain;
+
+    // If fully below threshold, return clean signal
+    if (mix < 0.001f)
+    {
+        prevSample = clean;
+        return clean;
+    }
+
+    // Saturated path
     // First stage saturation
-    float stage1 = transistorSaturate(amplified);
+    float stage1 = transistorSaturate(clean);
 
     // Asymmetric clipping from DC bias point
     float clipped = asymmetricClip(stage1, dcBias);
@@ -123,11 +133,12 @@ float PreampStage::processSample(float input)
     float stage2 = transistorSaturate(clipped * 0.7f) * 1.4f;
 
     // Emitter follower (unity gain, adds subtle coloration)
-    float output = stage2 + 0.02f * (stage2 - prevSample) * saturation;
+    float saturated = stage2 + 0.02f * (stage2 - prevSample) * saturation;
 
     prevSample = stage2;
 
-    return output;
+    // Crossfade between clean and saturated
+    return clean * (1.0f - mix) + saturated * mix;
 }
 
 void PreampStage::processBlock(float* buffer, int numSamples)

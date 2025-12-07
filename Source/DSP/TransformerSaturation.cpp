@@ -102,39 +102,48 @@ float TransformerSaturation::asymmetricSaturate(float x, float offset, float drv
 
 float TransformerSaturation::processSample(float input)
 {
-    // Envelope follower for smooth gating on silence
+    // Envelope follower for smooth crossfade
     float absInput = std::abs(input);
     if (absInput > envelope)
         envelope += envelopeAttack * (absInput - envelope);
     else
         envelope += envelopeRelease * (absInput - envelope);
 
-    // If signal is very quiet, pass through with minimal processing
-    if (envelope < noiseThreshold)
-    {
-        prevInput = input;
-        return input;
-    }
-
-    // Extract low frequency content
+    // Always update filter states to prevent drift (keeps DC blocker tracking)
     lfState += lpCoeff * (input - lfState);
+
+    // Calculate crossfade mix (smooth transition between clean and processed)
+    float mix = 0.0f;
+    if (envelope > noiseThreshold + crossfadeRange)
+        mix = 1.0f;
+    else if (envelope > noiseThreshold)
+        mix = (envelope - noiseThreshold) / crossfadeRange;
+
+    // If fully below threshold, just pass through with DC blocking
+    if (mix < 0.001f)
+    {
+        // Still update DC block state to prevent pops when signal returns
+        dcBlockState += dcBlockCoeff * (input - dcBlockState);
+        prevInput = input;
+        return input - dcBlockState;
+    }
 
     // Frequency-dependent drive
     float lfEnergy = std::abs(lfState);
     float dynamicDrive = drive * (1.0f + lfEnergy * lfSatAmount * 2.0f);
 
-    float output;
+    float saturated;
 
     switch (quality)
     {
         case Quality::Low:
-            output = asymmetricSaturate(input, dcOffset, dynamicDrive);
+            saturated = asymmetricSaturate(input, dcOffset, dynamicDrive);
             break;
 
         case Quality::Medium:
             {
                 float scaled = input * dynamicDrive;
-                output = adaa.processFirstOrderTanh(scaled + dcOffset) - std::tanh(dcOffset);
+                saturated = adaa.processFirstOrderTanh(scaled + dcOffset) - std::tanh(dcOffset);
             }
             break;
 
@@ -143,20 +152,23 @@ float TransformerSaturation::processSample(float input)
                 float scaled = input * dynamicDrive;
                 float hystOut = hysteresis.process(scaled);
                 float adaaOut = adaa.processFirstOrderTanh(scaled);
-                output = hystOut * 0.5f + adaaOut * 0.5f;
+                saturated = hystOut * 0.5f + adaaOut * 0.5f;
             }
             break;
     }
 
     // Soft limiting
     float threshold = (transformerType == Type::Input) ? 0.92f : 0.96f;
-    output = softClip(output, threshold);
+    saturated = softClip(saturated, threshold);
 
     // Subtle inductive effect (reduced to prevent artifacts)
     float inductance = 0.005f * ((transformerType == Type::Input) ? 0.3f : 0.15f);
-    output += inductance * (input - prevInput);
+    saturated += inductance * (input - prevInput);
 
-    // DC blocking filter (handles any DC offset naturally)
+    // Crossfade between clean and saturated
+    float output = input * (1.0f - mix) + saturated * mix;
+
+    // DC blocking filter
     dcBlockState += dcBlockCoeff * (output - dcBlockState);
     output = output - dcBlockState;
 

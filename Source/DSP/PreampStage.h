@@ -45,9 +45,12 @@ private:
     float capacitorState = 0.0f;  // Input coupling capacitor
     float prevSample = 0.0f;
 
-    // Envelope follower for smooth noise gating
+    // Envelope follower for smooth crossfade (prevents pops)
     float envelope = 0.0f;
-    static constexpr float noiseThreshold = 0.0001f;
+    static constexpr float envelopeAttack = 0.002f;   // ~5ms attack
+    static constexpr float envelopeRelease = 0.0002f; // ~50ms release
+    static constexpr float noiseThreshold = 0.002f;   // -54dB threshold
+    static constexpr float crossfadeRange = 0.004f;   // Crossfade window
 
     // Processing
     float asymmetricClip(float x, float bias) const;
